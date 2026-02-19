@@ -238,7 +238,6 @@ export function CreateEventPage() {
             Fill required fields to enable Create.
           </Text>
         </View>
-
         <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
