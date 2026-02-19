@@ -1,20 +1,23 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { NavigationContainer } from "@react-navigation/native";
+import { NavBar } from "./SCREENS/NAV/NavBar";
 
 export default function App() {
+  useEffect(() => {
+    console.log("SUPABASE URL:", process.env.EXPO_PUBLIC_SUPABASE_URL);
+    console.log(
+      "SUPABASE KEY (first 6):",
+      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 6)
+    );
+  }, []);
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <NavBar />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
