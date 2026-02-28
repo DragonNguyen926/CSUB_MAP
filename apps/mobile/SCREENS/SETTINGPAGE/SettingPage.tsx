@@ -1,6 +1,9 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "../NAV/ThemeProvider"; 
+import QRScannerScreen from "../SETTINGPAGE/QRScanner";
 import React, { useMemo, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -10,61 +13,55 @@ import {
   Platform,
 } from "react-native";
 
-const THEME = {
-  accent: "#5F62E6",
-  bg: "#F3F5F8",
-  card: "#FFFFFF",
-  muted: "rgba(20,20,20,0.55)",
-  divider: "rgba(20,20,20,0.08)",
-};
-
 export function SettingPage() {
+  const { darkMode, setDarkMode, theme } = useTheme(); 
   const [notifications, setNotifications] = useState(true);
   const [locationServices, setLocationServices] = useState(true);
   const [liveEvents, setLiveEvents] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-
-  
+  const [qrOpen, setQrOpen] = useState(false);
   const switchColors = useMemo(
-  () => ({
-    trackColor: { false: "rgba(20,20,20,0.12)", true: "rgba(95,98,230,0.65)" },
-    thumbColor: Platform.OS === "android" ? "#FFFFFF" : undefined,
-    ios_backgroundColor: "rgba(20,20,20,0.12)",
-  }),
-  []
-  ); 
+    () => ({
+      trackColor: {
+        false: darkMode ? "rgba(255,255,255,0.18)" : "rgba(20,20,20,0.12)",
+        true: darkMode ? "rgba(139,141,255,0.70)" : "rgba(95,98,230,0.65)",
+      },
+      thumbColor: Platform.OS === "android" ? "#FFFFFF" : undefined,
+      ios_backgroundColor: darkMode ? "rgba(255,255,255,0.18)" : "rgba(20,20,20,0.12)",
+    }),
+    [darkMode]
+  );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.bg }]}>
       <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.topBar}>
           <View style={styles.brand}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>R</Text>
+            <View style={[styles.avatar, { backgroundColor: theme.avatarBg }]}>
+              <Text style={[styles.avatarText, { color: theme.accent }]}>R</Text>
             </View>
 
             <View>
-              <Text style={styles.brandTitle}>CSUB</Text>
-              <Text style={styles.brandSub}>System & preferences</Text>
+              <Text style={[styles.brandTitle, { color: theme.text }]}>CSUB</Text>
+              <Text style={[styles.brandSub, { color: theme.muted }]}>System & preferences</Text>
             </View>
           </View>
 
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>RAMP</Text>
+          <View style={[styles.pill, { backgroundColor: theme.pillBg }]}>
+            <Text style={[styles.pillText, { color: theme.accent }]}>RAMP</Text>
           </View>
         </View>
 
         {/* Account card */}
-        <Card>
+        <Card theme={theme}>
           <View style={styles.row}>
-            <IconBox emoji="👤" />
+            <IconBox emoji="👤" theme={theme} />
             <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>Username</Text>
-              <Text style={styles.rowSub}>Student</Text>
+              <Text style={[styles.rowTitle, { color: theme.text }]}>Username</Text>
+              <Text style={[styles.rowSub, { color: theme.muted }]}>Student</Text>
             </View>
 
-            <ChevronButton onPress={() => {}} />
+            <ChevronButton onPress={() => {}} theme={theme} />
           </View>
         </Card>
 
@@ -75,18 +72,24 @@ export function SettingPage() {
             title="Help & Support"
             subtitle="FAQs, contact"
             onPress={() => {}}
+            theme={theme}
           />
           <Tile
-            emoji="ℹ️"
-            title="About App"
-            subtitle="Version info"
-            onPress={() => {}}
+            icon={ <MaterialCommunityIcons name="qrcode-scan" size={24} color={theme.text} />}
+            title="Scan QR"
+            subtitle="Scan a QR code"
+            //onPress={() => setQrOpen(true)}
+            onPress={() => {
+            console.log("Scan QR pressed");
+            setQrOpen(true); 
+            }}
+            theme={theme}
           />
         </View>
 
         {/* Preferences */}
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <Card>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Preferences</Text>
+        <Card theme={theme}>
           <ToggleRow
             emoji="🔔"
             title="Notifications"
@@ -94,8 +97,9 @@ export function SettingPage() {
             value={notifications}
             onValueChange={setNotifications}
             switchColors={switchColors}
+            theme={theme}
           />
-          <Divider />
+          <Divider theme={theme} />
           <ToggleRow
             emoji="📍"
             title="Location Services"
@@ -103,8 +107,9 @@ export function SettingPage() {
             value={locationServices}
             onValueChange={setLocationServices}
             switchColors={switchColors}
+            theme={theme}
           />
-          <Divider />
+          <Divider theme={theme} />
           <ToggleRow
             emoji="📡"
             title="Live Events"
@@ -112,95 +117,153 @@ export function SettingPage() {
             value={liveEvents}
             onValueChange={setLiveEvents}
             switchColors={switchColors}
+            theme={theme}
           />
-          <Divider />
+          <Divider theme={theme} />
           <ToggleRow
             emoji="🌙"
             title="Dark Mode"
             subtitle="Use darker appearance"
             value={darkMode}
-            onValueChange={setDarkMode}
+            onValueChange={setDarkMode} 
             switchColors={switchColors}
+            theme={theme}
           />
         </Card>
 
         {/* System */}
-        <Text style={styles.sectionTitle}>System</Text>
-        <Card>
-          <NavRow emoji="🛡️" title="Privacy" subtitle="Permissions & data" onPress={() => {}} />
-          <Divider />
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>System</Text>
+        <Card theme={theme}>
+          <NavRow
+            emoji="🛡️"
+            title="Privacy"
+            subtitle="Permissions & data"
+            onPress={() => {}}
+            theme={theme}
+          />
+          <Divider theme={theme} />
           <NavRow
             emoji="🗺️"
             title="Map Preferences"
             subtitle="Routing & accessibility"
             onPress={() => {}}
+            theme={theme}
           />
-          <Divider />
+          <Divider theme={theme} />
           <NavRow
             emoji="💾"
             title="Cache & Storage"
             subtitle="Clear downloaded data"
             onPress={() => {}}
+            theme={theme}
           />
         </Card>
 
         {/* Sign out */}
-        <TouchableOpacity style={styles.dangerBtn} onPress={() => {}}>
+        <TouchableOpacity
+          style={[
+            styles.dangerBtn,
+            { backgroundColor: theme.card, borderColor: theme.divider },
+          ]}
+          onPress={() => {}}
+        >
           <Text style={styles.dangerText}>Sign Out</Text>
         </TouchableOpacity>
 
+        <QRScannerScreen
+          visible={qrOpen}
+          onClose={() => setQrOpen(false)}
+          theme={theme.text}
+          onScanned={(data) => {
+          // do something with QR result
+          console.log("Scanned:", data);
+          setQrOpen(false);
+          }} 
+          />
+          
         <View style={{ height: 18 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+/* ---------- Types ---------- */
+type ThemeType = {
+  accent: string;
+  bg: string;
+  card: string;
+  text: string;
+  muted: string;
+  divider: string;
+  iconBoxBg: string;
+  avatarBg: string;
+  pillBg: string;
+  chevBg: string;
+  chevText: string;
+  tileChev: string;
+};
+
 /* ---------- Components ---------- */
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+function Card({ children, theme }: { children: React.ReactNode; theme: ThemeType }) {
+  return <View style={[styles.card, { backgroundColor: theme.card }]}>{children}</View>;
 }
 
-function Divider() {
-  return <View style={styles.divider} />;
+function Divider({ theme }: { theme: ThemeType }) {
+  return <View style={[styles.divider, { backgroundColor: theme.divider }]} />;
 }
 
-function IconBox({ emoji }: { emoji: string }) {
+function IconBox({ emoji, theme }: { emoji: string; theme: ThemeType }) {
   return (
-    <View style={styles.iconBox}>
+    <View style={[styles.iconBox, { backgroundColor: theme.iconBoxBg }]}>
       <Text style={styles.iconText}>{emoji}</Text>
     </View>
   );
 }
 
-function ChevronButton({ onPress }: { onPress: () => void }) {
+function ChevronButton({ onPress, theme }: { onPress: () => void; theme: ThemeType }) {
   return (
-    <TouchableOpacity style={styles.chevBtn} onPress={onPress} accessibilityRole="button">
-      <Text style={styles.chevText}>›</Text>
+    <TouchableOpacity
+      style={[styles.chevBtn, { backgroundColor: theme.chevBg }]}
+      onPress={onPress}
+      accessibilityRole="button"
+    >
+      <Text style={[styles.chevText, { color: theme.chevText }]}>›</Text>
     </TouchableOpacity>
   );
 }
 
 type TileProps = {
-  emoji: string;
+  emoji?: string;
+  icon?: React.ReactNode;
   title: string;
   subtitle: string;
   onPress: () => void;
+  theme: ThemeType;
 };
 
-function Tile({ emoji, title, subtitle, onPress }: TileProps) {
+function Tile({ emoji, icon, title, subtitle, onPress, theme }: TileProps) {
   return (
-    <TouchableOpacity style={styles.tile} onPress={onPress} accessibilityRole="button">
-      <View style={styles.tileLeft}>
-        <Text style={styles.tileEmoji}>{emoji}</Text>
+    <TouchableOpacity
+      style={[styles.tile, { backgroundColor: theme.card }]}
+      onPress={onPress}
+      accessibilityRole="button"
+    >
+      <View style={[styles.tileLeft, { backgroundColor: theme.iconBoxBg }]}>
+        {icon ? (
+          icon
+        ) : (
+            <Text style={styles.tileEmoji}>{emoji}</Text>
+        )}
+     
       </View>
 
       <View style={styles.tileText}>
-        <Text style={styles.tileTitle}>{title}</Text>
-        <Text style={styles.tileSub}>{subtitle}</Text>
+        <Text style={[styles.tileTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.tileSub, { color: theme.muted }]}>{subtitle}</Text>
       </View>
 
-      <Text style={styles.tileChev}>›</Text>
+      <Text style={[styles.tileChev, { color: theme.tileChev }]}>›</Text>
     </TouchableOpacity>
   );
 }
@@ -216,6 +279,7 @@ type ToggleRowProps = {
     thumbColor?: string;
     ios_backgroundColor?: string;
   };
+  theme: ThemeType;
 };
 
 function ToggleRow({
@@ -225,14 +289,15 @@ function ToggleRow({
   value,
   onValueChange,
   switchColors,
+  theme,
 }: ToggleRowProps) {
   return (
     <View style={styles.row}>
-      <IconBox emoji={emoji} />
+      <IconBox emoji={emoji} theme={theme} />
 
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        <Text style={styles.rowSub}>{subtitle}</Text>
+        <Text style={[styles.rowTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.rowSub, { color: theme.muted }]}>{subtitle}</Text>
       </View>
 
       <Switch
@@ -241,9 +306,11 @@ function ToggleRow({
         trackColor={switchColors.trackColor}
         thumbColor={switchColors.thumbColor}
         ios_backgroundColor={switchColors.ios_backgroundColor}
-        style={{ transform: [{ scaleX: 0.9 }, { scaleY: 1.09 }],
-        marginTop: 8,
-       }}
+        style={{
+          transform: [{ scaleX: 1.15 }, { scaleY: 1.09 }],
+          marginRight: 8,
+          marginTop: 8,
+        }}
       />
     </View>
   );
@@ -254,19 +321,20 @@ type NavRowProps = {
   title: string;
   subtitle: string;
   onPress: () => void;
+  theme: ThemeType;
 };
 
-function NavRow({ emoji, title, subtitle, onPress }: NavRowProps) {
+function NavRow({ emoji, title, subtitle, onPress, theme }: NavRowProps) {
   return (
     <TouchableOpacity style={styles.navRow} onPress={onPress} accessibilityRole="button">
-      <IconBox emoji={emoji} />
+      <IconBox emoji={emoji} theme={theme} />
 
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        <Text style={styles.rowSub}>{subtitle}</Text>
+        <Text style={[styles.rowTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.rowSub, { color: theme.muted }]}>{subtitle}</Text>
       </View>
 
-      <Text style={styles.tileChev}>›</Text>
+      <Text style={[styles.tileChev, { color: theme.tileChev }]}>›</Text>
     </TouchableOpacity>
   );
 }
@@ -274,7 +342,7 @@ function NavRow({ emoji, title, subtitle, onPress }: NavRowProps) {
 /* ---------- Styles ---------- */
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: THEME.bg },
+  safe: { flex: 1 },
 
   page: {
     paddingHorizontal: 16,
@@ -296,22 +364,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 999,
-    backgroundColor: "rgba(95,98,230,0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { color: THEME.accent, fontWeight: "800", fontSize: 18 },
+  avatarText: { fontWeight: "800", fontSize: 18 },
 
-  brandTitle: { fontSize: 22, fontWeight: "900", letterSpacing: 0.2, color: "#111" },
-  brandSub: { marginTop: 2, fontSize: 13, color: THEME.muted },
+  brandTitle: { fontSize: 22, fontWeight: "900", letterSpacing: 0.2 },
+  brandSub: { marginTop: 2, fontSize: 13 },
 
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(95,98,230,0.12)",
   },
-  pillText: { color: THEME.accent, fontWeight: "800" },
+  pillText: { fontWeight: "800" },
 
   sectionTitle: {
     marginTop: 18,
@@ -319,11 +385,9 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 18,
     fontWeight: "900",
-    color: "#111",
   },
 
   card: {
-    backgroundColor: THEME.card,
     borderRadius: 22,
     padding: 14,
     marginTop: 12,
@@ -331,21 +395,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 3, // Android shadow
+    elevation: 3,
   },
 
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   rowText: { flex: 1, minWidth: 0 },
 
-  rowTitle: { fontSize: 15, fontWeight: "900", color: "#111" },
-  rowSub: { marginTop: 2, fontSize: 13, color: THEME.muted },
+  rowTitle: { fontSize: 15, fontWeight: "900" },
+  rowSub: { marginTop: 2, fontSize: 13 },
 
   iconBox: {
     width: 44,
     height: 44,
     borderRadius: 16,
-    backgroundColor: "rgba(95,98,230,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -355,15 +418,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
-  chevText: { fontSize: 22, color: "rgba(20,20,20,0.45)", marginTop: -2 },
+  chevText: { fontSize: 22, marginTop: -2 },
 
   divider: {
     height: 1,
-    backgroundColor: THEME.divider,
     marginVertical: 12,
   },
 
@@ -375,7 +436,6 @@ const styles = StyleSheet.create({
 
   tile: {
     flex: 1,
-    backgroundColor: THEME.card,
     borderRadius: 22,
     padding: 14,
     shadowColor: "#000",
@@ -391,15 +451,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 16,
-    backgroundColor: "rgba(95,98,230,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   tileEmoji: { fontSize: 18 },
   tileText: { flex: 1 },
-  tileTitle: { fontSize: 14, fontWeight: "900", color: "#111" },
-  tileSub: { marginTop: 2, fontSize: 12.5, color: THEME.muted },
-  tileChev: { fontSize: 22, color: "rgba(20,20,20,0.35)", marginTop: -2 },
+  tileTitle: { fontSize: 14, fontWeight: "900" },
+  tileSub: { marginTop: 2, fontSize: 12.5 },
+  tileChev: { fontSize: 22, marginTop: -2 },
 
   navRow: {
     flexDirection: "row",
@@ -410,12 +469,10 @@ const styles = StyleSheet.create({
 
   dangerBtn: {
     marginTop: 14,
-    backgroundColor: THEME.card,
     borderRadius: 18,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: THEME.divider,
     shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 14,
@@ -423,4 +480,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   dangerText: { color: "#D12B2B", fontWeight: "900", fontSize: 15 },
+
 });
+
+
+

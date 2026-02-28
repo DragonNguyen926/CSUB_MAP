@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import {  EventsStack } from "./EventsStack";
-import styles from "./NavBar.styles";
+import { EventsStack } from "./EventsStack";
+import makeNavBarStyles from "./NavBar.styles";
 import { HomePage } from "../HOMEPAGE/HomePage";
 import { MapPage } from "../MAPPAGE/MapPage";
 import { SettingPage } from "../SETTINGPAGE/SettingPage";
+import { useTheme } from "../NAV/ThemeProvider";
 
 export type RootTabParamList = {
   Home: undefined;
@@ -32,6 +33,11 @@ function getIconName(routeName: keyof RootTabParamList, focused: boolean) {
 }
 
 export function NavBar() {
+  const { theme } = useTheme();
+
+  // ✅ create themed styles once per theme change
+  const styles = useMemo(() => makeNavBarStyles(theme), [theme]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
