@@ -2,8 +2,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../NAV/ThemeProvider"; 
 import QRScannerScreen from "../SETTINGPAGE/QRScanner";
 import React, { useMemo, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -307,7 +307,8 @@ function ToggleRow({
         thumbColor={switchColors.thumbColor}
         ios_backgroundColor={switchColors.ios_backgroundColor}
         style={{
-          transform: [{ scaleX: 0.9 }, { scaleY: 1.09 }],
+          transform: [{ scaleX: 1.15 }, { scaleY: 1.09 }],
+          marginRight: 8,
           marginTop: 8,
         }}
       />
@@ -481,4 +482,6 @@ const styles = StyleSheet.create({
   dangerText: { color: "#D12B2B", fontWeight: "900", fontSize: 15 },
 
 });
+
+
 
