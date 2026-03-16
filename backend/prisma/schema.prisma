@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+
+
+model Building {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  aliases   String[] @default([])
+  campus    String   @default("CSUB")
+
+  centerLat Float
+  centerLng Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events    Event[] 
+
+  @@index([name])
+  @@index([slug])
+}
+model Event {
+  id           String   @id @default(uuid())
+  title        String
+  organization String
+  startAt      DateTime
+  endAt        DateTime
+  roomNote     String?  @default("")
+
+  buildingId   String
+  building     Building @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([buildingId, startAt])
+  @@index([startAt, endAt])
+}

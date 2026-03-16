@@ -72,7 +72,8 @@ export const styles = StyleSheet.create({
 
   // =============== LOCATION BANNER ===============
   locationBanner: {
-    marginHorizontal: 16,
+    // ✅ FIX: scrollContent đã paddingHorizontal: 16 rồi, nên bỏ marginHorizontal để khỏi double inset
+    // marginHorizontal: 16,
     marginBottom: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -95,7 +96,10 @@ export const styles = StyleSheet.create({
   },
 
   // =============== SEARCH ===============
-  searchRow: {marginHorizontal: 16},
+  // ✅ FIX: scrollContent đã có paddingHorizontal: 16
+  searchRow: {
+    // marginHorizontal: 16,
+  },
 
   searchBox: {
     height: 44,
@@ -118,8 +122,11 @@ export const styles = StyleSheet.create({
   // =============== CHIPS ===============
   chipsRow: {
     paddingVertical: 12,
-    paddingLeft: 16, 
-    paddingRight: 16
+    // ✅ FIX: scrollContent đã paddingHorizontal: 16, bỏ paddingLeft/Right để khỏi lệch
+    // paddingLeft: 16,
+    // paddingRight: 16,
+    paddingLeft: 0,
+    paddingRight: 0,
   },
 
   chip: {
@@ -128,7 +135,7 @@ export const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#F3F4F6",
     marginRight: 10,
-    alignSelf: "flex-start"
+    alignSelf: "flex-start",
   },
 
   chipActive: { backgroundColor: "#6366F1" },
@@ -217,95 +224,114 @@ export const styles = StyleSheet.create({
 
   // =============== EVENTS ===============
   eventsRow: {
-    paddingLeft: 16,
-    paddingRight: 16,
+    // ✅ FIX: scrollContent đã paddingHorizontal: 16
+    // paddingLeft: 16,
+    // paddingRight: 16,
+    paddingLeft: 0,
+    paddingRight: 0,
+
     paddingTop: 10,
     paddingBottom: 20, // để shadow không bị cắt
   },
+
   eventCard: {
     width: 270,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
     padding: 16,
     marginRight: 14,
-  
+
     borderWidth: 1,
     borderColor: "#EEF2FF",
-  
+
     shadowColor: "#111827",
     shadowOpacity: Platform.OS === "ios" ? 0.08 : 0.15,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
   },
+
   eventTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
   },
+
   eventTopLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
     marginRight: 10,
   },
-  
+
   eventTopText: {
     flex: 1,
   },
+
   eventIconCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6", // xám nhạt như ảnh
+    backgroundColor: "#F3F4F6",
   },
+
   eventIconEmoji: {
     fontSize: 16,
   },
+
   badge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
   },
+
   badgeLive: {
-    backgroundColor: "#FEE2E2", // đỏ nhạt
+    backgroundColor: "#FEE2E2",
   },
+
   badgeNow: {
-    backgroundColor: "#FEF3C7", // vàng/beige giống ảnh
+    backgroundColor: "#FEF3C7",
   },
+
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
     color: "#111827",
   },
+
   eventTitle: {
     fontSize: 16,
     fontWeight: "900",
     color: "#111827",
   },
+
   eventSubtitle: {
     fontSize: 13,
     fontWeight: "600",
     color: "#6B7280",
     marginTop: 4,
   },
+
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 8,
   },
+
   metaIcon: {
     marginRight: 8,
   },
+
   metaText: {
     color: "#6B7280",
     fontSize: 13,
     fontWeight: "600",
     flex: 1,
   },
+
   eventBtn: {
     marginTop: 16,
     height: 44,
@@ -314,12 +340,13 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   eventBtnText: {
     color: "#FFFFFF",
     fontWeight: "900",
     fontSize: 14,
   },
-  
+
   // =============== BUILDINGS GRID ===============
   grid: {
     flexDirection: "row",
