@@ -1,20 +1,22 @@
-import { Platform } from "react-native";
+import { Platform } from "react-native"
 
 const SPACING = {
   xs: 6,
   sm: 8,
   md: 12,
   lg: 18,
-};
+}
 
-const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 72;
+const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 72
 
 type Theme = {
-  accent: string;
-  muted: string;
-  divider: string;
-  card: string;
-};
+  bg: string
+  accent: string
+  muted: string
+  divider: string
+  card: string
+  tabBar?: string
+}
 
 export default function makeNavBarStyles(theme: Theme) {
   return {
@@ -28,7 +30,7 @@ export default function makeNavBarStyles(theme: Theme) {
         paddingBottom: Platform.OS === "ios" ? SPACING.lg : SPACING.md,
         borderTopWidth: 1,
         borderTopColor: theme.divider,
-        backgroundColor: theme.card,
+        backgroundColor: theme.tabBar ?? theme.card,
 
         shadowColor: "#000",
         shadowOpacity: Platform.OS === "ios" ? 0.08 : 0,
@@ -43,5 +45,5 @@ export default function makeNavBarStyles(theme: Theme) {
         marginTop: SPACING.xs,
       } as const,
     },
-  };
+  }
 }

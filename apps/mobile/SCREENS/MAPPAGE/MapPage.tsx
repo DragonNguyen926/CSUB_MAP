@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Platform,
   Pressable,
   TextInput,
   Animated,
@@ -19,8 +18,10 @@ import MapView, {
 } from "react-native-maps"
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import * as Location from "expo-location"
-import { styles } from "./MapPage.styles"
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
+import { useTheme } from "../NAV/ThemeProvider"
+import { useAuth } from "../SETTINGPAGE/AUTH/AuthContext"
+import { createStyles } from "./MapPage.styles"
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN
 
@@ -28,10 +29,8 @@ const TILESET = "mapbox.mapbox-streets-v8"
 const TILEQUERY_RADIUS_METERS = 18
 const TILEQUERY_LIMIT = 5
 
-// ✅ Backend base (ngrok). If you use simulator, you can switch to http://localhost:3001
 const API_BASE = "https://ezequiel-unfractious-serafina.ngrok-free.dev"
 
-// ✅ Dev-only mock GPS (stable testing)
 const DEV_USE_MOCK_LOCATION = true
 type MockPreset = "student_union" | "housing"
 const DEV_DEFAULT_PRESET: MockPreset = "student_union"
@@ -41,7 +40,7 @@ type LatLng = { latitude: number; longitude: number }
 type PlaceResult = {
   id: string
   place_name: string
-  center: [number, number] // [lng, lat]
+  center: [number, number]
   place_type?: string[]
   properties?: { category?: string }
   text?: string
@@ -55,31 +54,47 @@ type MapIntent =
 
 type RouteParams = { intent?: MapIntent }
 
+type FriendMapItem = {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  latitude: number
+  longitude: number
+  updatedAt: string
+  isHidden: boolean
+  isPinned: boolean
+}
+
 export function MapPage() {
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView>(null)
 
   const navigation = useNavigation<any>()
   const route = useRoute<any>() as { params?: RouteParams }
+  const { theme } = useTheme()
+  const styles = createStyles(theme)
+  const { token, isAuthenticated } = useAuth()
+
+  const isGuest = !token || !isAuthenticated
 
   const [userLocation, setUserLocation] = useState<LatLng | null>(null)
 
-  // ✅ dev mock mode + preset switch
+  const [friendMapItems, setFriendMapItems] = useState<FriendMapItem[]>([])
+  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
+
   const [useMockLocation, setUseMockLocation] = useState(
     __DEV__ ? DEV_USE_MOCK_LOCATION : false
   )
   const [mockPreset, setMockPreset] = useState<MockPreset>(DEV_DEFAULT_PRESET)
 
-  // building tap (optional highlight)
   const [selectedPolygon, setSelectedPolygon] = useState<LatLng[] | null>(null)
 
-  // search UI
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<PlaceResult[]>([])
   const [searching, setSearching] = useState(false)
   const [searchFocus, setSearchFocus] = useState(false)
 
-  // selection (IMPORTANT: id-based)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<{
     id: string
@@ -88,18 +103,15 @@ export function MapPage() {
     title: string
   } | null>(null)
 
-  // route
   const [routeCoords, setRouteCoords] = useState<RNLatLng[] | null>(null)
   const [routeMeta, setRouteMeta] = useState<{ distanceM: number; durationS: number } | null>(null)
   const [routing, setRouting] = useState(false)
 
-  // ✅ NEW: pending intent handling when userLocation not ready yet
   const [pendingRouteTo, setPendingRouteTo] = useState<LatLng | null>(null)
   const [pendingMyLocation, setPendingMyLocation] = useState(false)
 
   const debounceRef = useRef<any>(null)
 
-  // animations
   const backdrop = useRef(new Animated.Value(0)).current
   const sheetY = useRef(new Animated.Value(-10)).current
   const sheetOpacity = useRef(new Animated.Value(0)).current
@@ -113,6 +125,15 @@ export function MapPage() {
     }),
     []
   )
+
+  const visibleFriendMapItems = useMemo(() => {
+    return friendMapItems
+      .filter((item) => !item.isHidden)
+      .sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      })
+  }, [friendMapItems])
 
   const showSearchSheet = useCallback(() => {
     Animated.parallel([
@@ -141,9 +162,62 @@ export function MapPage() {
     showSearchSheet()
   }, [showSearchSheet])
 
-  // =========================
-  // 🧪 DEV MOCK LOCATION (from backend buildings)
-  // =========================
+  const pushMyLocationToBackend = useCallback(
+    async (coords: LatLng) => {
+      if (!token || !isAuthenticated) return
+
+      try {
+        const res = await fetch(`${API_BASE}/location/update`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          }),
+        })
+
+        if (!res.ok) {
+          const body = await res.text()
+          console.log("pushMyLocationToBackend failed:", res.status, body)
+        }
+      } catch (err) {
+        console.log("pushMyLocationToBackend error:", err)
+      }
+    },
+    [token, isAuthenticated]
+  )
+
+  const fetchMapData = useCallback(async () => {
+    if (!token || !isAuthenticated) {
+      setFriendMapItems([])
+      return
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/location/map`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        console.log("fetchMapData failed:", data)
+        setFriendMapItems([])
+        return
+      }
+
+      setFriendMapItems(data.items ?? [])
+    } catch (err) {
+      console.log("fetchMapData error:", err)
+      setFriendMapItems([])
+    }
+  }, [token, isAuthenticated])
+
   const getMockLocationFromBackend = useCallback(
     async (preset: MockPreset): Promise<LatLng | null> => {
       try {
@@ -173,17 +247,25 @@ export function MapPage() {
     []
   )
 
-  const setAndCenterUserLocation = useCallback((coords: LatLng, duration = 650) => {
-    setUserLocation(coords)
-    mapRef.current?.animateToRegion(
-      { ...coords, latitudeDelta: 0.006, longitudeDelta: 0.006 },
-      duration
-    )
-  }, [])
+  const setAndCenterUserLocation = useCallback(
+    (coords: LatLng, duration = 650) => {
+      setUserLocation(coords)
+      mapRef.current?.animateToRegion(
+        { ...coords, latitudeDelta: 0.006, longitudeDelta: 0.006 },
+        duration
+      )
+      pushMyLocationToBackend(coords)
+    },
+    [pushMyLocationToBackend]
+  )
 
-  // =========================
-  // 📍 GET USER LOCATION (mock first in dev)
-  // =========================
+  useEffect(() => {
+    if (isGuest) {
+      setFriendMapItems([])
+      setSelectedFriendId(null)
+    }
+  }, [isGuest])
+
   useEffect(() => {
     let cancelled = false
 
@@ -192,7 +274,6 @@ export function MapPage() {
         setRouteCoords(null)
         setRouteMeta(null)
 
-        // ✅ 1) DEV mock GPS (stable)
         if (__DEV__ && useMockLocation) {
           const mock = await getMockLocationFromBackend(mockPreset)
           if (mock && !cancelled) {
@@ -201,7 +282,6 @@ export function MapPage() {
           }
         }
 
-        // ✅ 2) fallback: real GPS
         const perm = await Location.requestForegroundPermissionsAsync()
         if (perm.status !== "granted") return
 
@@ -227,9 +307,22 @@ export function MapPage() {
     }
   }, [getMockLocationFromBackend, mockPreset, setAndCenterUserLocation, useMockLocation])
 
-  // =========================
-  // 🔎 SEARCH (backend buildings)
-  // =========================
+  useEffect(() => {
+    if (!token || !isAuthenticated) return
+
+    fetchMapData()
+
+    const id = setInterval(() => {
+      fetchMapData()
+
+      if (userLocation) {
+        pushMyLocationToBackend(userLocation)
+      }
+    }, 15000)
+
+    return () => clearInterval(id)
+  }, [token, isAuthenticated, userLocation, fetchMapData, pushMyLocationToBackend])
+
   const searchPlaces = useCallback(async (text: string) => {
     const q = text.trim()
     if (!q) {
@@ -279,7 +372,6 @@ export function MapPage() {
     }
   }, [query, searchPlaces, searchFocus])
 
-  // IMPORTANT: if user types AFTER selecting, clear selection (Apple Maps-ish)
   const onChangeQuery = useCallback(
     (t: string) => {
       setQuery(t)
@@ -294,12 +386,10 @@ export function MapPage() {
     [selectedId]
   )
 
-  // =========================
-  // 🧭 ROUTE (in-app polyline)
-  // =========================
   const fetchRoute = useCallback(
     async (to: LatLng) => {
       if (!userLocation) return
+
       try {
         setRouting(true)
         setRouteCoords(null)
@@ -342,7 +432,6 @@ export function MapPage() {
       850
     )
 
-    // if userLocation not ready, queue it
     if (!userLocation) {
       setPendingRouteTo(to)
       return
@@ -351,15 +440,11 @@ export function MapPage() {
     await fetchRoute(to)
   }, [fetchRoute, selectedPlace, userLocation])
 
-  // =========================
-  // ✅ RECEIVE INTENT FROM OTHER SCREENS (Home/Events)
-  // =========================
   useFocusEffect(
     useCallback(() => {
       const intent = route.params?.intent
       if (!intent) return
 
-      // clear param so it doesn't re-run every focus
       navigation.setParams?.({ intent: undefined })
 
       if (intent.type === "my_location") {
@@ -367,6 +452,7 @@ export function MapPage() {
           setPendingMyLocation(true)
           return
         }
+
         mapRef.current?.animateToRegion(
           { ...userLocation, latitudeDelta: 0.006, longitudeDelta: 0.006 },
           650
@@ -379,7 +465,12 @@ export function MapPage() {
       if (intent.type === "route_to") {
         const p = intent.place
         setSelectedId(p.id)
-        setSelectedPlace({ id: p.id, title: p.title, latitude: p.latitude, longitude: p.longitude })
+        setSelectedPlace({
+          id: p.id,
+          title: p.title,
+          latitude: p.latitude,
+          longitude: p.longitude,
+        })
         setQuery(p.title)
 
         const to = { latitude: p.latitude, longitude: p.longitude }
@@ -388,19 +479,16 @@ export function MapPage() {
           650
         )
 
-        // ✅ if userLocation not ready yet, queue it
         if (!userLocation) {
           setPendingRouteTo(to)
           return
         }
 
         fetchRoute(to)
-        return
       }
     }, [route.params, navigation, userLocation, fetchRoute])
   )
 
-  // ✅ When GPS/mock becomes ready, execute pending actions
   useEffect(() => {
     if (!userLocation) return
 
@@ -421,9 +509,6 @@ export function MapPage() {
     }
   }, [userLocation, pendingMyLocation, pendingRouteTo, fetchRoute])
 
-  // =========================
-  // 🏢 TILEQUERY (tap building) - optional
-  // =========================
   const onPressMap = useCallback(
     async (e: MapPressEvent) => {
       dismissSearch()
@@ -450,6 +535,7 @@ export function MapPage() {
           best.geometry.type === "Polygon"
             ? best.geometry.coordinates[0]
             : best.geometry.coordinates?.[0]?.[0]
+
         if (!ring) return
 
         const polygon = ring.map(([lng, lat]: [number, number]) => ({
@@ -489,40 +575,70 @@ export function MapPage() {
           style={StyleSheet.absoluteFill}
           initialRegion={initialRegion}
           onPress={onPressMap}
-          // ✅ IMPORTANT: disable native GPS overlay in dev mock mode
           showsUserLocation={!__DEV__ || !useMockLocation}
           showsCompass
         >
-          {/* Selected place marker */}
           {selectedPlace && (
             <Marker
-              coordinate={{ latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }}
+              coordinate={{
+                latitude: selectedPlace.latitude,
+                longitude: selectedPlace.longitude,
+              }}
               title={selectedPlace.title}
             />
           )}
 
-          {/* ✅ Mock user marker (stable) */}
           {__DEV__ && useMockLocation && userLocation && (
-            <Marker coordinate={userLocation} title="You (Mock)" pinColor="#2563EB" />
+            <Marker coordinate={userLocation} title="You (Mock)" pinColor={theme.accent} />
           )}
 
-          {/* Route */}
+          {!isGuest &&
+            visibleFriendMapItems.map((friend) => {
+              const isSelected = selectedFriendId === friend.id
+
+              return (
+                <Marker
+                  key={friend.id}
+                  coordinate={{
+                    latitude: friend.latitude,
+                    longitude: friend.longitude,
+                  }}
+                  title={`${friend.firstName} ${friend.lastName}`}
+                  description={friend.email}
+                  onPress={() => setSelectedFriendId(friend.id)}
+                >
+                  <View
+                    style={{
+                      backgroundColor: theme.card,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      borderWidth: isSelected ? 2 : 1,
+                      borderColor: isSelected ? theme.accent : theme.divider,
+                    }}
+                  >
+                    <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>
+                      {friend.firstName}
+                    </Text>
+                  </View>
+                </Marker>
+              )
+            })}
+
           {routeCoords && (
-            <Polyline coordinates={routeCoords} strokeWidth={5} strokeColor="#111827" />
+            <Polyline coordinates={routeCoords} strokeWidth={5} strokeColor={theme.text} />
           )}
 
-          {/* Optional tapped building polygon */}
           {selectedPolygon && (
             <Polygon
               coordinates={selectedPolygon}
               strokeWidth={2}
-              strokeColor="#2563EB"
+              strokeColor={theme.accent}
               fillColor="rgba(37,99,235,0.18)"
             />
           )}
         </MapView>
 
-        {/* Backdrop */}
         <Animated.View
           pointerEvents={searchFocus ? "auto" : "none"}
           style={[
@@ -535,9 +651,7 @@ export function MapPage() {
           <Pressable style={StyleSheet.absoluteFill} onPress={dismissSearch} />
         </Animated.View>
 
-        {/* Top UI */}
         <View style={[styles.topWrap, { paddingTop: Math.max(8, insets.top) }]}>
-          {/* Search bar */}
           <View style={styles.searchBar}>
             <Text style={styles.searchIcon}>⌕</Text>
 
@@ -546,7 +660,7 @@ export function MapPage() {
               onChangeText={onChangeQuery}
               onFocus={focusSearch}
               placeholder="Search buildings (ex: library, union, housing)"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.muted}
               style={styles.searchInput}
               autoCorrect={false}
               autoCapitalize="none"
@@ -572,7 +686,6 @@ export function MapPage() {
               <View style={{ width: 32 }} />
             )}
 
-            {/* Go enabled only if selectedId exists */}
             <Pressable
               style={({ pressed }) => [
                 styles.goBtn,
@@ -589,7 +702,25 @@ export function MapPage() {
             </Pressable>
           </View>
 
-          {/* ✅ DEV toggle pill */}
+          {!isGuest && (
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <View
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 999,
+                  backgroundColor: theme.card,
+                  borderWidth: 1,
+                  borderColor: theme.divider,
+                }}
+              >
+                <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>
+                  Friends on map: {visibleFriendMapItems.length}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {__DEV__ && (
             <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
               <Pressable
@@ -599,14 +730,14 @@ export function MapPage() {
                     paddingHorizontal: 12,
                     paddingVertical: 8,
                     borderRadius: 999,
-                    backgroundColor: "rgba(17,24,39,0.85)",
+                    backgroundColor: theme.card,
                     borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.12)",
+                    borderColor: theme.divider,
                     opacity: pressed ? 0.8 : 1,
                   },
                 ]}
               >
-                <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
+                <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>
                   {useMockLocation ? "Mock ON" : "Mock OFF"}
                 </Text>
               </Pressable>
@@ -621,23 +752,20 @@ export function MapPage() {
                     paddingHorizontal: 12,
                     paddingVertical: 8,
                     borderRadius: 999,
-                    backgroundColor: useMockLocation
-                      ? "rgba(17,24,39,0.85)"
-                      : "rgba(17,24,39,0.35)",
+                    backgroundColor: theme.card,
                     borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.12)",
-                    opacity: pressed ? 0.8 : 1,
+                    borderColor: theme.divider,
+                    opacity: !useMockLocation ? 0.5 : pressed ? 0.8 : 1,
                   },
                 ]}
               >
-                <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
+                <Text style={{ color: theme.text, fontSize: 12, fontWeight: "700" }}>
                   {devPillLabel ?? "GPS"}
                 </Text>
               </Pressable>
             </View>
           )}
 
-          {/* Results */}
           <Animated.View
             pointerEvents={searchFocus ? "auto" : "none"}
             style={[
@@ -654,8 +782,8 @@ export function MapPage() {
                 {searching
                   ? "Searching..."
                   : results.length
-                  ? "Tap a result (select), then press Go"
-                  : "Type to search buildings"}
+                    ? "Tap a result (select), then press Go"
+                    : "Type to search buildings"}
               </Text>
             </View>
 
@@ -696,14 +824,13 @@ export function MapPage() {
                 })}
               </View>
             )}
-          </Animated.View>
 
-          {/* Route chip */}
-          {routeText && (
-            <View style={styles.routeChip}>
-              <Text style={styles.routeChipText}>{routeText}</Text>
-            </View>
-          )}
+            {routeText && (
+              <View style={styles.routeChip}>
+                <Text style={styles.routeChipText}>{routeText}</Text>
+              </View>
+            )}
+          </Animated.View>
         </View>
       </View>
     </SafeAreaView>

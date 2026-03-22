@@ -12,9 +12,11 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
-import { styles } from "./CreateEventPage.styles"
-import type { EventsStackParamList } from "../NAV/EventsStack" // ✅ vì stack của bạn nằm trong NAV
+import { createStyles } from "./CreateEventPage.styles"
+import type { EventsStackParamList } from "../NAV/EventsStack"
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
+import { useTheme } from "../NAV/ThemeProvider"
+
 type CreateEventRoute = RouteProp<EventsStackParamList, "CreateEvent">
 
 type BuildingItem = {
@@ -27,7 +29,6 @@ type BuildingItem = {
 }
 
 const API_BASE = "http://localhost:3001"
-// NOTE: tạm giống curl của bạn (LA offset)
 const TZ_OFFSET = "-07:00"
 
 function pad2(n: number) {
@@ -49,7 +50,7 @@ function buildTimeSlots15m(startHour = 7, endHour = 22) {
   for (let h = startHour; h <= endHour; h++) {
     for (let m = 0; m < 60; m += 15) {
       if (h === endHour && m > 0) break
-      slots.push(`${pad2(h)}:${pad2(m)}`) // 24h HH:mm
+      slots.push(`${pad2(h)}:${pad2(m)}`)
     }
   }
   return slots
@@ -67,15 +68,23 @@ function prettyTime(hhmm: string) {
 
 export function CreateEventPage() {
   const insets = useSafeAreaInsets()
-  const navigation = useNavigation()
+  const navigation = useNavigation<any>()
   const route = useRoute<CreateEventRoute>()
+  const { theme } = useTheme()
+  const styles = createStyles(theme)
 
   const weekStart = useMemo(() => new Date(route.params.weekStartISO), [route.params.weekStartISO])
 
   const [eventTitle, setEventTitle] = useState("")
   const [organization, setOrganization] = useState("")
+  const [buildingQuery, setBuildingQuery] = useState("")
+  const [buildingId, setBuildingId] = useState<string | null>(null)
+  const [buildingName, setBuildingName] = useState("")
+  const [suggestions, setSuggestions] = useState<BuildingItem[]>([])
+  const [loadingSuggest, setLoadingSuggest] = useState(false)
+  const [roomNote, setRoomNote] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  // week date options (Mon..Sun)
   const weekDates = useMemo(() => {
     return Array.from({ length: 7 }).map((_, idx) => {
       const d = addDays(weekStart, idx)
@@ -83,7 +92,11 @@ export function CreateEventPage() {
         idx,
         date: d,
         dateStr: toYYYYMMDD(d),
-        label: d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+        label: d.toLocaleDateString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }),
       }
     })
   }, [weekStart])
@@ -100,26 +113,13 @@ export function CreateEventPage() {
     setSelectedDateStr(found?.dateStr ?? weekDates[0]?.dateStr ?? "")
   }, [weekDates])
 
-  // times
   const timeSlots = useMemo(() => buildTimeSlots15m(7, 22), [])
   const [startHHMM, setStartHHMM] = useState<string>("10:00")
   const [endHHMM, setEndHHMM] = useState<string>("11:00")
-
-  // time picker modal
   const [timePickerOpen, setTimePickerOpen] = useState<null | "start" | "end">(null)
 
-  // building search
-  const [buildingQuery, setBuildingQuery] = useState("")
-  const [buildingId, setBuildingId] = useState<string | null>(null)
-  const [buildingName, setBuildingName] = useState("")
-  const [suggestions, setSuggestions] = useState<BuildingItem[]>([])
-  const [loadingSuggest, setLoadingSuggest] = useState(false)
   const debounceRef = useRef<any>(null)
 
-  const [roomNote, setRoomNote] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-
-  // debounce building search
   useEffect(() => {
     const q = buildingQuery.trim()
     if (!q) {
@@ -148,12 +148,11 @@ export function CreateEventPage() {
     }
   }, [buildingQuery])
 
-  // keep end > start
   useEffect(() => {
     const sIdx = timeSlots.indexOf(startHHMM)
     const eIdx = timeSlots.indexOf(endHHMM)
     if (sIdx !== -1 && eIdx !== -1 && eIdx <= sIdx) {
-      const next = timeSlots[Math.min(sIdx + 4, timeSlots.length - 1)] // +60 mins
+      const next = timeSlots[Math.min(sIdx + 4, timeSlots.length - 1)]
       setEndHHMM(next)
     }
   }, [startHHMM, endHHMM, timeSlots])
@@ -239,22 +238,21 @@ export function CreateEventPage() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-       <ScrollView
-  showsVerticalScrollIndicator={false}
-  contentContainerStyle={styles.scrollContent}
-  contentInsetAdjustmentBehavior="never"
-  scrollIndicatorInsets={{ bottom: 0 }}
-  style={{ marginBottom: -insets.bottom }} // ✅ kéo content xuống, ăn luôn safe-area
->
-        {/* ===== Header ===== */}
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="never"
+        scrollIndicatorInsets={{ bottom: 0 }}
+        style={{ marginBottom: -insets.bottom }}
+      >
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backBtn}
             activeOpacity={0.85}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="chevron-back" size={22} color="#0F172A" />
+            <Ionicons name="chevron-back" size={22} color={theme.text} />
           </TouchableOpacity>
 
           <View style={styles.headerTitleWrap}>
@@ -265,7 +263,6 @@ export function CreateEventPage() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* ===== Details ===== */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Details</Text>
 
@@ -278,6 +275,7 @@ export function CreateEventPage() {
             value={eventTitle}
             onChangeText={setEventTitle}
             placeholder="e.g., Photography Club Meetup"
+            placeholderTextColor={theme.muted}
           />
 
           <View style={{ height: 12 }} />
@@ -291,10 +289,10 @@ export function CreateEventPage() {
             value={organization}
             onChangeText={setOrganization}
             placeholder="e.g., Photo Club"
+            placeholderTextColor={theme.muted}
           />
         </View>
 
-        {/* ===== Time ===== */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Time</Text>
 
@@ -305,7 +303,6 @@ export function CreateEventPage() {
             </Text>
           </View>
 
-          {/* Date pills */}
           <View style={styles.dayPillsRow}>
             {weekDates.map((d) => {
               const active = selectedDateStr === d.dateStr
@@ -329,7 +326,6 @@ export function CreateEventPage() {
 
           <View style={{ height: 12 }} />
 
-          {/* ✅ Start select */}
           <View style={styles.fieldLabelRow}>
             <Text style={styles.fieldLabel}>Start Time</Text>
             <Text style={styles.required}>Required</Text>
@@ -345,7 +341,6 @@ export function CreateEventPage() {
 
           <View style={{ height: 12 }} />
 
-          {/* ✅ End select */}
           <View style={styles.fieldLabelRow}>
             <Text style={styles.fieldLabel}>End Time</Text>
             <Text style={styles.required}>Required</Text>
@@ -371,7 +366,6 @@ export function CreateEventPage() {
           )}
         </View>
 
-        {/* ===== Location ===== */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Location</Text>
 
@@ -389,13 +383,14 @@ export function CreateEventPage() {
               setBuildingName("")
             }}
             placeholder="Search building… (e.g., library)"
+            placeholderTextColor={theme.muted}
             autoCapitalize="none"
           />
 
           <View style={{ marginTop: 10 }}>
             {loadingSuggest ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <ActivityIndicator />
+                <ActivityIndicator color={theme.accent} />
                 <Text style={styles.selectRightHint}>Searching…</Text>
               </View>
             ) : null}
@@ -409,7 +404,7 @@ export function CreateEventPage() {
                       key={b.id}
                       style={[
                         styles.chip,
-                        isSelected && { borderColor: "rgba(37, 99, 235, 0.45)" },
+                        isSelected && { borderColor: theme.accent },
                       ]}
                       onPress={() => {
                         setBuildingId(b.id)
@@ -419,7 +414,7 @@ export function CreateEventPage() {
                       }}
                       activeOpacity={0.85}
                     >
-                      <Text style={[styles.chipText, isSelected && { color: "#2563EB" }]}>
+                      <Text style={[styles.chipText, isSelected && { color: theme.accent }]}>
                         {b.name}
                       </Text>
                     </TouchableOpacity>
@@ -449,12 +444,12 @@ export function CreateEventPage() {
               value={roomNote}
               onChangeText={setRoomNote}
               placeholder="e.g., Room 311 (optional). We navigate to the building only."
+              placeholderTextColor={theme.muted}
               multiline
             />
           </View>
         </View>
 
-        {/* ===== Submit ===== */}
         <View style={styles.bottomBar}>
           <TouchableOpacity
             style={[
@@ -474,7 +469,6 @@ export function CreateEventPage() {
         </View>
       </ScrollView>
 
-      {/* ✅ Time Picker Modal Bottom Sheet */}
       <Modal
         visible={timePickerOpen !== null}
         transparent
@@ -490,7 +484,7 @@ export function CreateEventPage() {
         >
           <View
             style={{
-              backgroundColor: "white",
+              backgroundColor: theme.card,
               borderTopLeftRadius: 18,
               borderTopRightRadius: 18,
               padding: 14,
@@ -505,12 +499,12 @@ export function CreateEventPage() {
                 marginBottom: 10,
               }}
             >
-              <Text style={{ fontSize: 16, fontWeight: "800", color: "#0F172A" }}>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: theme.text }}>
                 {timePickerOpen === "start" ? "Pick Start Time" : "Pick End Time"}
               </Text>
 
               <TouchableOpacity onPress={() => setTimePickerOpen(null)} activeOpacity={0.85}>
-                <Text style={{ color: "#2563EB", fontWeight: "800" }}>Done</Text>
+                <Text style={{ color: theme.accent, fontWeight: "800" }}>Done</Text>
               </TouchableOpacity>
             </View>
 
@@ -538,16 +532,14 @@ export function CreateEventPage() {
                       borderRadius: 12,
                       marginBottom: 8,
                       borderWidth: 1,
-                      borderColor: active
-                        ? "rgba(37,99,235,0.45)"
-                        : "rgba(15,23,42,0.10)",
+                      borderColor: active ? theme.accent : theme.divider,
                       opacity: disabled ? 0.35 : 1,
                     }}
                   >
                     <Text
                       style={{
                         fontWeight: "800",
-                        color: active ? "#2563EB" : "#0F172A",
+                        color: active ? theme.accent : theme.text,
                       }}
                     >
                       {prettyTime(t)}

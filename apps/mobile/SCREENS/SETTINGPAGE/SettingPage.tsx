@@ -1,25 +1,33 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useTheme } from "../NAV/ThemeProvider"; 
-import QRScannerScreen from "./QRScanner";
-import React, { useMemo, useState } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons"
+import { useTheme, type AppTheme } from "../NAV/ThemeProvider"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TouchableOpacity,
   View,
   Platform,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { styles } from "./SettingPage.style";
+  Alert,
+  Linking,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
+import { useFocusEffect, useNavigation } from "@react-navigation/native"
+import { useAuth } from "./AUTH/AuthContext"
+import { styles } from "./SettingPage.style"
+import * as Location from "expo-location"
+
+const API_BASE = "https://ezequiel-unfractious-serafina.ngrok-free.dev"
 
 export function SettingPage() {
-  const { darkMode, setDarkMode, theme } = useTheme(); 
-  const [notifications, setNotifications] = useState(true);
-  const [locationServices, setLocationServices] = useState(true);
-  const [liveEvents, setLiveEvents] = useState(true);
-  const [qrOpen, setQrOpen] = useState(false);
+  const navigation = useNavigation<any>()
+  const { darkMode, setDarkMode, theme } = useTheme()
+  const { user, token, isAuthenticated, logout } = useAuth()
+
+  const [notifications, setNotifications] = useState(false)
+  const [locationServices, setLocationServices] = useState(false)
+  const [incomingCount, setIncomingCount] = useState(0)
+
   const switchColors = useMemo(
     () => ({
       trackColor: {
@@ -27,15 +35,230 @@ export function SettingPage() {
         true: darkMode ? "rgba(139,141,255,0.70)" : "rgba(95,98,230,0.65)",
       },
       thumbColor: Platform.OS === "android" ? "#FFFFFF" : undefined,
-      ios_backgroundColor: darkMode ? "rgba(255,255,255,0.18)" : "rgba(20,20,20,0.12)",
+      ios_backgroundColor: darkMode
+        ? "rgba(255,255,255,0.18)"
+        : "rgba(20,20,20,0.12)",
     }),
     [darkMode]
-  );
+  )
+
+  const fullName = user ? `${user.firstName} ${user.lastName}` : "Username"
+  const roleLabel = user?.role === "admin" ? "Admin" : "Student"
+  const emailLabel = user?.email || "Not available"
+
+  const fetchIncomingCount = useCallback(async () => {
+    if (!token) {
+      setIncomingCount(0)
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/friends/requests/incoming`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const text = await response.text()
+      let data: any = null
+
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch {
+        data = null
+      }
+
+      if (!response.ok) {
+        setIncomingCount(0)
+        return
+      }
+
+      setIncomingCount(data?.requests?.length || 0)
+    } catch (error) {
+      console.log("fetchIncomingCount error:", error)
+      setIncomingCount(0)
+    }
+  }, [token])
+
+  const syncLocationPermission = useCallback(async () => {
+    try {
+      const locationPerm = await Location.getForegroundPermissionsAsync()
+      setLocationServices(locationPerm.granted)
+    } catch (error) {
+      console.log("syncLocationPermission error:", error)
+    }
+  }, [])
+
+  useEffect(() => {
+    syncLocationPermission()
+  }, [syncLocationPermission])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated && token) {
+        fetchIncomingCount()
+      }
+      syncLocationPermission()
+    }, [isAuthenticated, token, fetchIncomingCount, syncLocationPermission])
+  )
+
+  const openAppSettings = async () => {
+    try {
+      await Linking.openSettings()
+    } catch {
+      Alert.alert(
+        "Unable to open settings",
+        "Please open your device settings manually."
+      )
+    }
+  }
+
+  const handleNotificationToggle = async (nextValue: boolean) => {
+    setNotifications(nextValue)
+
+    Alert.alert(
+      "Notification Settings",
+      nextValue
+        ? "To fully enable notifications, please allow them in your device settings."
+        : "To fully disable notifications, please turn them off in your device settings.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open Settings", onPress: openAppSettings },
+      ]
+    )
+  }
+
+  const handleLocationToggle = async (nextValue: boolean) => {
+    if (nextValue) {
+      try {
+        const current = await Location.getForegroundPermissionsAsync()
+
+        if (current.granted) {
+          setLocationServices(true)
+          return
+        }
+
+        const requested = await Location.requestForegroundPermissionsAsync()
+        const granted = requested.granted
+
+        setLocationServices(granted)
+
+        if (!granted) {
+          Alert.alert("Location disabled", "Location permission was not granted.")
+        }
+      } catch (error) {
+        console.log("handleLocationToggle error:", error)
+        Alert.alert("Error", "Could not update location permission.")
+      }
+      return
+    }
+
+    setLocationServices(false)
+    Alert.alert(
+      "Turn off location access",
+      "To fully disable location access for the app, open device settings.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open Settings", onPress: openAppSettings },
+      ]
+    )
+  }
+
+  const handleLogout = async () => {
+    try {
+      setDarkMode(false)
+      setNotifications(false)
+      setLocationServices(false)
+      setIncomingCount(0)
+      await logout()
+    } catch {
+      Alert.alert("Logout failed", "Please try again.")
+    }
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView
+        edges={["top", "left", "right"]}
+        style={[styles.safe, { backgroundColor: theme.bg }]}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.page, { flexGrow: 1 }]}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={styles.topBar}>
+            <View style={styles.brand}>
+              <View style={[styles.avatar, { backgroundColor: theme.avatarBg }]}>
+                <Text style={[styles.avatarText, { color: theme.accent }]}>R</Text>
+              </View>
+
+              <View>
+                <Text style={[styles.brandTitle, { color: theme.text }]}>CSUB</Text>
+                <Text style={[styles.brandSub, { color: theme.muted }]}>
+                  Preferences
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.pill, { backgroundColor: theme.pillBg }]}>
+              <Text style={[styles.pillText, { color: theme.accent }]}>RAMP</Text>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.emptyWrap,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.divider,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.emptyIconCircle,
+                { backgroundColor: theme.iconBoxBg },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="account-lock-outline"
+                size={36}
+                color={theme.accent}
+              />
+            </View>
+
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>
+              Log in to access settings
+            </Text>
+
+            <Text style={[styles.emptySubtitle, { color: theme.muted }]}>
+              Sign in or create an account to manage preferences and your account.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.loginBtn, { backgroundColor: theme.accent }]}
+              onPress={() => navigation.navigate("Auth")}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.loginBtnText}>Log In / Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.bg }]}>
-      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={[styles.safe, { backgroundColor: theme.bg }]}
+    >
+      <ScrollView
+        contentContainerStyle={[styles.page, { flexGrow: 1, paddingBottom: 36 }]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         <View style={styles.topBar}>
           <View style={styles.brand}>
             <View style={[styles.avatar, { backgroundColor: theme.avatarBg }]}>
@@ -44,7 +267,9 @@ export function SettingPage() {
 
             <View>
               <Text style={[styles.brandTitle, { color: theme.text }]}>CSUB</Text>
-              <Text style={[styles.brandSub, { color: theme.muted }]}>System & preferences</Text>
+              <Text style={[styles.brandSub, { color: theme.muted }]}>
+                Preferences
+              </Text>
             </View>
           </View>
 
@@ -53,235 +278,183 @@ export function SettingPage() {
           </View>
         </View>
 
-        {/* Account card */}
         <Card theme={theme}>
-          <View style={styles.row}>
-            <IconBox emoji="👤" theme={theme} />
-            <View style={styles.rowText}>
-              <Text style={[styles.rowTitle, { color: theme.text }]}>Username</Text>
-              <Text style={[styles.rowSub, { color: theme.muted }]}>Student</Text>
-            </View>
-
-            <ChevronButton onPress={() => {}} theme={theme} />
-          </View>
+          <NavRow
+            emoji="👤"
+            title={fullName}
+            subtitle={`${roleLabel} • ${emailLabel}`}
+            onPress={() => navigation.navigate("ProfileSettings")}
+            theme={theme}
+          />
         </Card>
 
-        {/* Quick tiles */}
-        <View style={styles.tileGrid}>
-          <Tile
-            emoji="❓"
-            title="Help & Support"
-            subtitle="FAQs, contact"
-            onPress={() => {}}
+        <Card theme={theme}>
+          <NavRow
+            emoji="👥"
+            title="Friends"
+            subtitle="Manage your connections"
+            onPress={() => navigation.navigate("Friends")}
             theme={theme}
+            badge={incomingCount}
           />
-          <Tile
-            icon={ <MaterialCommunityIcons name="qrcode-scan" size={24} color={theme.text} />}
-            title="Scan QR"
-            subtitle="Scan a QR code"
-            //onPress={() => setQrOpen(true)}
-            onPress={() => {
-            console.log("Scan QR pressed");
-            setQrOpen(true); 
-            }}
-            theme={theme}
-          />
-        </View>
+        </Card>
 
-        {/* Preferences */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Preferences</Text>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Preferences
+        </Text>
+
         <Card theme={theme}>
           <ToggleRow
             emoji="🔔"
             title="Notifications"
-            subtitle="Event reminders & alerts"
+            subtitle="Open device notification settings"
             value={notifications}
-            onValueChange={setNotifications}
+            onValueChange={handleNotificationToggle}
             switchColors={switchColors}
             theme={theme}
           />
           <Divider theme={theme} />
+
           <ToggleRow
             emoji="📍"
             title="Location Services"
-            subtitle="Nearby places & routing"
+            subtitle="Allow nearby places & routing"
             value={locationServices}
-            onValueChange={setLocationServices}
+            onValueChange={handleLocationToggle}
             switchColors={switchColors}
             theme={theme}
           />
           <Divider theme={theme} />
-          <ToggleRow
-            emoji="📡"
-            title="Live Events"
-            subtitle="Show LIVE badge content"
-            value={liveEvents}
-            onValueChange={setLiveEvents}
-            switchColors={switchColors}
-            theme={theme}
-          />
-          <Divider theme={theme} />
+
           <ToggleRow
             emoji="🌙"
             title="Dark Mode"
             subtitle="Use darker appearance"
             value={darkMode}
-            onValueChange={setDarkMode} 
+            onValueChange={setDarkMode}
             switchColors={switchColors}
             theme={theme}
           />
         </Card>
 
-        {/* System */}
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>System</Text>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Account
+        </Text>
+
         <Card theme={theme}>
-          <NavRow
-            emoji="🛡️"
-            title="Privacy"
-            subtitle="Permissions & data"
-            onPress={() => {}}
+          <InfoRow
+            emoji="✉️"
+            title="Campus Email"
+            value={emailLabel}
             theme={theme}
           />
           <Divider theme={theme} />
-          <NavRow
-            emoji="🗺️"
-            title="Map Preferences"
-            subtitle="Routing & accessibility"
-            onPress={() => {}}
-            theme={theme}
-          />
-          <Divider theme={theme} />
-          <NavRow
-            emoji="💾"
-            title="Cache & Storage"
-            subtitle="Clear downloaded data"
-            onPress={() => {}}
+          <InfoRow
+            emoji="🪪"
+            title="Role"
+            value={roleLabel}
             theme={theme}
           />
         </Card>
 
-        {/* Sign out */}
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Support
+        </Text>
+
+        <Card theme={theme}>
+          <NavRow
+            emoji="❓"
+            title="Help"
+            subtitle="Get support using the app"
+            onPress={() => Alert.alert("Help", "Help center coming soon.")}
+            theme={theme}
+          />
+          <Divider theme={theme} />
+          <NavRow
+            emoji="ℹ️"
+            title="About Ramp"
+            subtitle="Version and app information"
+            onPress={() => Alert.alert("About Ramp", "Ramp at CSUB")}
+            theme={theme}
+          />
+        </Card>
+
         <TouchableOpacity
           style={[
             styles.dangerBtn,
-            { backgroundColor: theme.card, borderColor: theme.divider },
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.divider,
+            },
           ]}
-          onPress={() => {}}
+          onPress={handleLogout}
+          activeOpacity={0.9}
         >
           <Text style={styles.dangerText}>Sign Out</Text>
         </TouchableOpacity>
-
-        <QRScannerScreen
-          visible={qrOpen}
-          onClose={() => setQrOpen(false)}
-          theme={theme.text}
-          onScanned={(data) => {
-          // do something with QR result
-          console.log("Scanned:", data);
-          setQrOpen(false);
-          }} 
-          />
-          
-        <View style={{ height: 18 }} />
       </ScrollView>
     </SafeAreaView>
-  );
+  )
 }
 
-/* ---------- Types ---------- */
-type ThemeType = {
-  accent: string;
-  bg: string;
-  card: string;
-  text: string;
-  muted: string;
-  divider: string;
-  iconBoxBg: string;
-  avatarBg: string;
-  pillBg: string;
-  chevBg: string;
-  chevText: string;
-  tileChev: string;
-};
-
-/* ---------- Components ---------- */
-
-function Card({ children, theme }: { children: React.ReactNode; theme: ThemeType }) {
-  return <View style={[styles.card, { backgroundColor: theme.card }]}>{children}</View>;
+function Card({
+  children,
+  theme,
+}: {
+  children: React.ReactNode
+  theme: AppTheme
+}) {
+  return <View style={[styles.card, { backgroundColor: theme.card }]}>{children}</View>
 }
 
-function Divider({ theme }: { theme: ThemeType }) {
-  return <View style={[styles.divider, { backgroundColor: theme.divider }]} />;
+function Divider({ theme }: { theme: AppTheme }) {
+  return <View style={[styles.divider, { backgroundColor: theme.divider }]} />
 }
 
-function IconBox({ emoji, theme }: { emoji: string; theme: ThemeType }) {
+function IconBox({ emoji, theme }: { emoji: string; theme: AppTheme }) {
   return (
     <View style={[styles.iconBox, { backgroundColor: theme.iconBoxBg }]}>
       <Text style={styles.iconText}>{emoji}</Text>
     </View>
-  );
+  )
 }
 
-function ChevronButton({ onPress, theme }: { onPress: () => void; theme: ThemeType }) {
+function InfoRow({
+  emoji,
+  title,
+  value,
+  theme,
+}: {
+  emoji: string
+  title: string
+  value: string
+  theme: AppTheme
+}) {
   return (
-    <TouchableOpacity
-      style={[styles.chevBtn, { backgroundColor: theme.chevBg }]}
-      onPress={onPress}
-      accessibilityRole="button"
-    >
-      <Text style={[styles.chevText, { color: theme.chevText }]}>›</Text>
-    </TouchableOpacity>
-  );
-}
+    <View style={styles.row}>
+      <IconBox emoji={emoji} theme={theme} />
 
-type TileProps = {
-  emoji?: string;
-  icon?: React.ReactNode;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-  theme: ThemeType;
-};
-
-function Tile({ emoji, icon, title, subtitle, onPress, theme }: TileProps) {
-  return (
-    <TouchableOpacity
-      style={[styles.tile, { backgroundColor: theme.card }]}
-      onPress={onPress}
-      accessibilityRole="button"
-    >
-      <View style={[styles.tileLeft, { backgroundColor: theme.iconBoxBg }]}>
-        {icon ? (
-          icon
-        ) : (
-            <Text style={styles.tileEmoji}>{emoji}</Text>
-        )}
-     
+      <View style={styles.rowText}>
+        <Text style={[styles.rowTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.rowSub, { color: theme.muted }]}>{value}</Text>
       </View>
-
-      <View style={styles.tileText}>
-        <Text style={[styles.tileTitle, { color: theme.text }]}>{title}</Text>
-        <Text style={[styles.tileSub, { color: theme.muted }]}>{subtitle}</Text>
-      </View>
-
-      <Text style={[styles.tileChev, { color: theme.tileChev }]}>›</Text>
-    </TouchableOpacity>
-  );
+    </View>
+  )
 }
 
 type ToggleRowProps = {
-  emoji: string;
-  title: string;
-  subtitle: string;
-  value: boolean;
-  onValueChange: (next: boolean) => void;
+  emoji: string
+  title: string
+  subtitle: string
+  value: boolean
+  onValueChange: (next: boolean) => void
   switchColors: {
-    trackColor: { false: string; true: string };
-    thumbColor?: string;
-    ios_backgroundColor?: string;
-  };
-  theme: ThemeType;
-};
+    trackColor: { false: string; true: string }
+    thumbColor?: string
+    ios_backgroundColor?: string
+  }
+  theme: AppTheme
+}
 
 function ToggleRow({
   emoji,
@@ -313,20 +486,33 @@ function ToggleRow({
         }}
       />
     </View>
-  );
+  )
 }
 
 type NavRowProps = {
-  emoji: string;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-  theme: ThemeType;
-};
+  emoji: string
+  title: string
+  subtitle: string
+  onPress: () => void
+  theme: AppTheme
+  badge?: number
+}
 
-function NavRow({ emoji, title, subtitle, onPress, theme }: NavRowProps) {
+function NavRow({
+  emoji,
+  title,
+  subtitle,
+  onPress,
+  theme,
+  badge = 0,
+}: NavRowProps) {
   return (
-    <TouchableOpacity style={styles.navRow} onPress={onPress} accessibilityRole="button">
+    <TouchableOpacity
+      style={styles.navRow}
+      onPress={onPress}
+      accessibilityRole="button"
+      activeOpacity={0.85}
+    >
       <IconBox emoji={emoji} theme={theme} />
 
       <View style={styles.rowText}>
@@ -334,8 +520,13 @@ function NavRow({ emoji, title, subtitle, onPress, theme }: NavRowProps) {
         <Text style={[styles.rowSub, { color: theme.muted }]}>{subtitle}</Text>
       </View>
 
+      {badge > 0 && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badge}</Text>
+        </View>
+      )}
+
       <Text style={[styles.tileChev, { color: theme.tileChev }]}>›</Text>
     </TouchableOpacity>
-  );
+  )
 }
-

@@ -4,14 +4,23 @@ import cors from "cors"
 import { z } from "zod"
 import { prisma } from "./prisma"
 import cron from "node-cron"
+import authRoutes from "./routes/auth.routes"
+import meRoutes from "./routes/me.routes"
+import friendsRoutes from "./routes/friends.routes"
+import locationRoutes from "./routes/location.routes"
+
 const app = express()
 app.use(cors())
 app.use(express.json())
+app.use("/friends", friendsRoutes)
+app.use("/location", locationRoutes)
 app.get("/debug/db", async (_req, res) => {
   const buildingCount = await prisma.building.count()
   const eventCount = await prisma.event.count()
   res.json({ buildingCount, eventCount })
 })
+app.use("/api/auth", authRoutes)
+app.use("/api/auth", meRoutes)
 
 app.get("/debug/events", async (_req, res) => {
   const items = await prisma.event.findMany({

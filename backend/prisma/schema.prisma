@@ -1,28 +1,29 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
 }
 
-
 model Building {
-  id        String   @id @default(uuid())
-  slug      String   @unique
-  name      String
-  aliases   String[] @default([])
-  campus    String   @default("CSUB")
+  id      String   @id @default(uuid())
+  slug    String   @unique
+  name    String
+  aliases String[] @default([])
+  campus  String   @default("CSUB")
 
   centerLat Float
   centerLng Float
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  events    Event[] 
+  events    Event[]
 
   @@index([name])
   @@index([slug])
 }
+
 model Event {
   id           String   @id @default(uuid())
   title        String
@@ -31,12 +32,123 @@ model Event {
   endAt        DateTime
   roomNote     String?  @default("")
 
-  buildingId   String
-  building     Building @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Restrict)
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([buildingId, startAt])
   @@index([startAt, endAt])
+}
+
+enum UserRole {
+  student
+  admin
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+  rejected
+  blocked
+}
+
+model User {
+  id                String    @id @default(cuid())
+  firstName         String
+  lastName          String
+  email             String    @unique
+  passwordHash      String
+  role              UserRole  @default(student)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  resetOtpHash      String?
+  resetOtpExpiresAt DateTime?
+
+  sentFriendRequests     Friendship[] @relation("FriendshipRequester")
+  receivedFriendRequests Friendship[] @relation("FriendshipAddressee")
+
+  location               UserLocation?
+  locationSharesGiven    LocationShare[] @relation("LocationSharesGiven")
+  locationSharesReceived LocationShare[] @relation("LocationSharesReceived")
+
+  locationViewPrefsGiven  LocationViewPreference[] @relation("LocationViewPrefsGiven")
+  locationViewPrefsTarget LocationViewPreference[] @relation("LocationViewPrefsTarget")
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(pending)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([requesterId])
+  @@index([addresseeId])
+  @@index([status])
+  @@index([requesterId, addresseeId])
+}
+
+model PendingSignup {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  firstName    String
+  lastName     String
+  passwordHash String
+  role         UserRole @default(student)
+  otpHash      String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model UserLocation {
+  userId    String   @id
+  latitude  Float
+  longitude Float
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
+}
+
+model LocationShare {
+  id        String   @id @default(cuid())
+  ownerId   String
+  viewerId  String
+  isEnabled Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner  User @relation("LocationSharesGiven", fields: [ownerId], references: [id], onDelete: Cascade)
+  viewer User @relation("LocationSharesReceived", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, viewerId])
+  @@index([ownerId])
+  @@index([viewerId])
+  @@index([isEnabled])
+}
+
+model LocationViewPreference {
+  id        String   @id @default(cuid())
+  viewerId  String
+  targetId  String
+  isHidden  Boolean  @default(false)
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  viewer User @relation("LocationViewPrefsGiven", fields: [viewerId], references: [id], onDelete: Cascade)
+  target User @relation("LocationViewPrefsTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([viewerId, targetId])
+  @@index([viewerId])
+  @@index([targetId])
 }

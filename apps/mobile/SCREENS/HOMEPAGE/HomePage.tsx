@@ -9,10 +9,12 @@ import {
   ActivityIndicator,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { styles } from "./HomePage.styles"
+import { createStyles } from "./HomePage.styles"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
+import { useTheme } from "../NAV/ThemeProvider"
 import * as Location from "expo-location"
+import MapView, { Marker, Region } from "react-native-maps"
 
 const API_BASE = "https://ezequiel-unfractious-serafina.ngrok-free.dev"
 
@@ -34,15 +36,19 @@ type Building = {
 type PlaceResult = {
   id: string
   place_name: string
-  center: [number, number] // [lng, lat]
+  center: [number, number]
   place_type?: string[]
   properties?: { category?: string }
   text?: string
 }
 
-type NavPlace = { id: string; title: string; latitude: number; longitude: number }
+type NavPlace = {
+  id: string
+  title: string
+  latitude: number
+  longitude: number
+}
 
-// ===== DB event type (matching EventPage response) =====
 type DbEvent = {
   id: string
   title: string
@@ -59,7 +65,6 @@ type DbEvent = {
   }
 }
 
-// ===== UI event card for HomePage =====
 type EventCards = {
   id: string
   title: string
@@ -71,10 +76,6 @@ type EventCards = {
   navPlace: NavPlace
 }
 
-/**
- * ✅ Popular/common buildings (not personal favorites)
- * distance will be computed from userLocation + building coords
- */
 const buildingsData: Building[] = [
   { id: "fav_library", name: "Library", subtitle: "Main Campus Library", distance: "—", icon: "📚" },
   { id: "fav_union", name: "Student Union", subtitle: "Student Union", distance: "—", icon: "🍽️" },
@@ -82,7 +83,6 @@ const buildingsData: Building[] = [
   { id: "fav_gym", name: "Campus Gym", subtitle: "Fitness Center", distance: "—", icon: "🏋️‍♂️" },
 ]
 
-// ===== helpers =====
 function pad2(n: number) {
   return String(n).padStart(2, "0")
 }
@@ -91,7 +91,6 @@ function toYYYYMMDD(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
-// ✅ local date string from ISO (avoids UTC off-by-one)
 function localYYYYMMDD(input: string | Date) {
   const d = typeof input === "string" ? new Date(input) : input
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
@@ -130,9 +129,8 @@ function pickIconForOrg(org?: string) {
   return "🎟️"
 }
 
-// ===== distance helpers =====
 function haversineMeters(a: LatLng, b: LatLng) {
-  const R = 6371000 // meters
+  const R = 6371000
   const toRad = (deg: number) => (deg * Math.PI) / 180
 
   const dLat = toRad(b.latitude - a.latitude)
@@ -162,38 +160,34 @@ function formatDistance(meters: number) {
 
 export function HomePage() {
   const navigation = useNavigation<any>()
+  const { theme } = useTheme()
+  const styles = createStyles(theme)
 
   const [category, setCategory] = useState<(typeof categories)[number]>("Library")
   const [query, setQuery] = useState("")
   const placeholder = "Search for classes, buildings,..."
 
-  // selected building (for Get Directions)
   const [selectedPlaceForDirections, setSelectedPlaceForDirections] = useState<NavPlace | null>(null)
 
-  // search states
   const [results, setResults] = useState<PlaceResult[]>([])
   const [searching, setSearching] = useState(false)
   const [searchFocus, setSearchFocus] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const debounceRef = useRef<any>(null)
 
-  const [useMockLocation, setUseMockLocation] = useState(__DEV__ ? DEV_USE_MOCK_LOCATION : false)
-  const [mockPreset, setMockPreset] = useState<MockPreset>(DEV_DEFAULT_PRESET)
+  const [useMockLocation] = useState(__DEV__ ? DEV_USE_MOCK_LOCATION : false)
+  const [mockPreset] = useState<MockPreset>(DEV_DEFAULT_PRESET)
 
   const [nearLabel, setNearLabel] = useState("....")
   const [userLocation, setUserLocation] = useState<LatLng | null>(null)
 
-  // ✅ flag: after we navigate to Map, clear when we return (Home focuses again)
   const [clearOnReturn, setClearOnReturn] = useState(false)
 
-  // ✅ Today events from DB
   const [todayEvents, setTodayEvents] = useState<EventCards[]>([])
   const [loadingToday, setLoadingToday] = useState(false)
 
-  // ✅ Favorite building routing state
   const [favRouting, setFavRouting] = useState<string | null>(null)
 
-  // ✅ favorite building coords + computed distance labels
   const [favPlacesById, setFavPlacesById] = useState<Record<string, NavPlace>>({})
   const [favDistanceById, setFavDistanceById] = useState<Record<string, string>>({})
   const [favLoadingById, setFavLoadingById] = useState<Record<string, boolean>>({})
@@ -206,7 +200,6 @@ export function HomePage() {
     setSearchFocus(false)
   }, [])
 
-  // ✅ when Home comes back into focus, clear (only if we navigated to Map before)
   useFocusEffect(
     useCallback(() => {
       if (!clearOnReturn) return
@@ -264,7 +257,6 @@ export function HomePage() {
     setSelectedPlaceForDirections(null)
   }, [])
 
-  // ✅ Fetch wide range (yesterday..tomorrow), then filter local "today"
   const loadTodayEvents = useCallback(async () => {
     setLoadingToday(true)
     try {
@@ -278,8 +270,6 @@ export function HomePage() {
       const to = toYYYYMMDD(t)
 
       const url = `${API_BASE}/api/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
-      console.log("Home TodayEvents fetch:", url)
-
       const res = await fetch(url)
       const data = await res.json().catch(() => ({}))
 
@@ -290,12 +280,8 @@ export function HomePage() {
       }
 
       const items: DbEvent[] = Array.isArray(data?.items) ? data.items : []
-      console.log("Home TodayEvents raw count:", items.length)
-
       const todayLocal = toYYYYMMDD(new Date())
       const onlyToday = items.filter((ev) => localYYYYMMDD(ev.startAt) === todayLocal)
-
-      console.log("Home TodayEvents filtered(today) count:", onlyToday.length)
 
       const mapped: EventCards[] = onlyToday.map((ev) => {
         const b = ev.building
@@ -332,7 +318,6 @@ export function HomePage() {
     loadTodayEvents()
   }, [loadTodayEvents])
 
-  // ✅ Navigate event -> Map
   const handleNavigate = useCallback(
     (ev: EventCards) => {
       navigation.navigate("Map", {
@@ -343,7 +328,6 @@ export function HomePage() {
     [navigation]
   )
 
-  // ✅ View All -> jump to Events page (robust route finding)
   const goToEvents = useCallback(() => {
     const TAB_CANDIDATES = ["Events", "Event", "EventsTab", "EventTab"]
     const SCREEN_CANDIDATES = ["EventHome", "EventsHome", "EventPage", "EventsPage"]
@@ -364,7 +348,6 @@ export function HomePage() {
       }
     }
 
-    // 1) direct navigate
     for (const navObj of chain) {
       for (const name of [...TAB_CANDIDATES, ...SCREEN_CANDIDATES]) {
         const ok = tryNav(navObj, () => navObj.navigate(name))
@@ -372,7 +355,6 @@ export function HomePage() {
       }
     }
 
-    // 2) tab -> screen
     for (const navObj of chain) {
       for (const tabName of TAB_CANDIDATES) {
         for (const screenName of SCREEN_CANDIDATES) {
@@ -382,16 +364,15 @@ export function HomePage() {
       }
     }
 
-    // fail -> debug
     const root = chain[chain.length - 1]
     const state = root?.getState?.()
     Alert.alert("View All failed", "Không tìm thấy route Events. Mở console để xem routes thật.")
     console.log("ROOT NAV STATE:", JSON.stringify(state, null, 2))
   }, [navigation])
 
-  const onPressGetDirections = useCallback(() => {
+  const onPressGo = useCallback(() => {
     if (!selectedPlaceForDirections) {
-      Alert.alert("Pick a destination", "Search and tap a building first, then press Get Directions.")
+      Alert.alert("Pick a destination", "Search and tap a building first, then press Go.")
       return
     }
 
@@ -407,7 +388,6 @@ export function HomePage() {
     setClearOnReturn(true)
   }, [navigation])
 
-  // ===== Favorite Buildings: fetch coords by name =====
   const getNavPlaceFromBuildingName = useCallback(async (name: string): Promise<NavPlace | null> => {
     try {
       const url = `${API_BASE}/api/buildings/search?q=${encodeURIComponent(name)}&limit=8`
@@ -436,13 +416,11 @@ export function HomePage() {
     }
   }, [])
 
-  // ✅ preload favorite places coords (1 time)
   useEffect(() => {
     let cancelled = false
 
     ;(async () => {
       for (const b of buildingsData) {
-        // already loaded
         if (favPlacesById[b.id]) continue
 
         setFavLoadingById((prev) => ({ ...prev, [b.id]: true }))
@@ -453,8 +431,6 @@ export function HomePage() {
 
         if (place) {
           setFavPlacesById((prev) => ({ ...prev, [b.id]: place }))
-        } else {
-          // keep missing silently; UI will show —
         }
       }
     })()
@@ -462,10 +438,8 @@ export function HomePage() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getNavPlaceFromBuildingName])
+  }, [favPlacesById, getNavPlaceFromBuildingName])
 
-  // ✅ compute distances whenever userLocation or favorite coords change
   useEffect(() => {
     if (!userLocation) return
 
@@ -490,7 +464,6 @@ export function HomePage() {
     async (b: Building) => {
       setFavRouting(b.id)
 
-      // use cached coords first
       const cached = favPlacesById[b.id]
       const place = cached ?? (await getNavPlaceFromBuildingName(b.name))
 
@@ -501,7 +474,6 @@ export function HomePage() {
         return
       }
 
-      // store cache if it was missing
       if (!cached) setFavPlacesById((prev) => ({ ...prev, [b.id]: place }))
 
       navigation.navigate("Map", { intent: { type: "route_to", place } })
@@ -548,7 +520,6 @@ export function HomePage() {
 
     ;(async () => {
       try {
-        // ✅ 1) DEV mock first
         if (__DEV__ && useMockLocation) {
           const mock = await getMockLocationFromBackend(mockPreset)
           if (mock && !cancelled) {
@@ -558,7 +529,6 @@ export function HomePage() {
           }
         }
 
-        // ✅ 2) fallback to real GPS
         const { status } = await Location.requestForegroundPermissionsAsync()
         if (status !== "granted") {
           if (!cancelled) setNearLabel("Location unavailable")
@@ -574,7 +544,6 @@ export function HomePage() {
         const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
         setUserLocation(coords)
 
-        // reverse geocode for label
         const rev = await Location.reverseGeocodeAsync(coords)
         const p = rev?.[0]
         const label = p?.name || p?.street || p?.district || p?.city || p?.region || "Nearby"
@@ -589,10 +558,28 @@ export function HomePage() {
     }
   }, [getMockLocationFromBackend, mockPreset, useMockLocation])
 
+  const miniMapRegion: Region | undefined = userLocation
+    ? {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.0035,
+        longitudeDelta: 0.0035,
+      }
+    : selectedPlaceForDirections
+      ? {
+          latitude: selectedPlaceForDirections.latitude,
+          longitude: selectedPlaceForDirections.longitude,
+          latitudeDelta: 0.0035,
+          longitudeDelta: 0.0035,
+        }
+      : undefined
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }} edges={["top"]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* HEADER */}
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.bg }]} edges={["top"]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.avatar}>
@@ -600,21 +587,25 @@ export function HomePage() {
             </View>
             <Text style={styles.headerTitle}>CSUB</Text>
           </View>
+
           <View style={styles.pill}>
             <Text style={styles.pillText}>RAMP</Text>
           </View>
         </View>
 
-        {/* NOTIFICATION AREA */}
         <View style={styles.locationBanner}>
-          <MaterialCommunityIcons name="map-marker" size={16} color="#2563EB" style={styles.locationIcon} />
-          <Text style={styles.locationText}>You are near {nearLabel} </Text>
+          <MaterialCommunityIcons
+            name="map-marker"
+            size={16}
+            color={theme.accent}
+            style={styles.locationIcon}
+          />
+          <Text style={styles.locationText}>You are near {nearLabel}</Text>
         </View>
 
-        {/* SEARCH BAR */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
-            <MaterialCommunityIcons name="magnify" size={20} color="#000000" />
+            <MaterialCommunityIcons name="magnify" size={20} color={theme.text} />
             <TextInput
               style={styles.searchInput}
               placeholder={placeholder}
@@ -622,30 +613,29 @@ export function HomePage() {
               onChangeText={onChangeQuery}
               onFocus={() => setSearchFocus(true)}
               onBlur={() => setSearchFocus(false)}
-              placeholderTextColor="#000000"
+              placeholderTextColor={theme.muted}
               autoCorrect={false}
               autoCapitalize="none"
               returnKeyType="search"
-              onSubmitEditing={() => searchPlaces(query)}
+              onSubmitEditing={onPressGo}
             />
           </View>
+
+          <TouchableOpacity
+            style={[styles.goBtn, !selectedPlaceForDirections && styles.goBtnDisabled]}
+            onPress={onPressGo}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.goBtnText}>Go</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Suggestions */}
         {searchFocus && (results.length > 0 || searching) && (
-          <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-            <View
-              style={{
-                backgroundColor: "#fff",
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: "rgba(0,0,0,0.08)",
-                overflow: "hidden",
-              }}
-            >
-              <View style={{ padding: 12 }}>
-                <Text style={{ fontWeight: "700" }}>Suggestions</Text>
-                <Text style={{ marginTop: 4, opacity: 0.7 }}>
+          <View style={styles.suggestionsWrap}>
+            <View style={styles.suggestionsCard}>
+              <View style={styles.suggestionsHeader}>
+                <Text style={styles.suggestionsTitle}>Suggestions</Text>
+                <Text style={styles.suggestionsSubtitle}>
                   {searching ? "Searching..." : "Tap a building to set destination"}
                 </Text>
               </View>
@@ -660,30 +650,25 @@ export function HomePage() {
                     key={r.id}
                     onPress={() => {
                       setSelectedId(r.id)
-
                       setSelectedPlaceForDirections({
                         id: r.id,
                         title,
                         latitude: lat,
                         longitude: lng,
                       })
-
                       setQuery(title)
                       setSearchFocus(false)
                       setResults([])
                     }}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 12,
-                      borderTopWidth: 1,
-                      borderTopColor: "rgba(0,0,0,0.06)",
-                      backgroundColor: isSelected ? "rgba(37,99,235,0.08)" : "#fff",
-                    }}
+                    style={[
+                      styles.suggestionItem,
+                      isSelected && styles.suggestionItemSelected,
+                    ]}
                   >
-                    <Text style={{ fontWeight: "600" }} numberOfLines={2}>
+                    <Text style={styles.suggestionName} numberOfLines={2}>
                       {title}
                     </Text>
-                    <Text style={{ marginTop: 4, opacity: 0.6 }} numberOfLines={1}>
+                    <Text style={styles.suggestionMeta} numberOfLines={1}>
                       building
                     </Text>
                   </TouchableOpacity>
@@ -693,8 +678,11 @@ export function HomePage() {
           </View>
         )}
 
-        {/* CHIPS */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
           {categories.map((c) => {
             const active = category === c
             return (
@@ -707,52 +695,109 @@ export function HomePage() {
                 }}
                 style={[styles.chip, active && styles.chipActive]}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{c}</Text>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {c}
+                </Text>
               </TouchableOpacity>
             )
           })}
         </ScrollView>
 
-        {/* QUICK ACTIONS */}
         <View style={styles.quickRow}>
-          <TouchableOpacity style={styles.primaryCard} onPress={onPressGetDirections}>
-            <Text style={styles.primaryCardTitle}>Get Directions</Text>
-            <Text style={styles.primaryCardSub}> Places around you</Text>
-            <MaterialCommunityIcons
-              name="arrow-right-circle"
-              size={32}
-              color="#FFFFFF"
-              style={styles.primaryCardIcon}
-            />
-          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.primaryCard}
+            onPress={onPressMyLocation}
+            activeOpacity={0.92}
+          >
+            {miniMapRegion ? (
+              <MapView
+                style={styles.miniMap}
+                region={miniMapRegion}
+                pointerEvents="none"
+                scrollEnabled={false}
+                zoomEnabled={false}
+                rotateEnabled={false}
+                pitchEnabled={false}
+              >
+                {userLocation && (
+                  <Marker
+                    coordinate={{
+                      latitude: userLocation.latitude,
+                      longitude: userLocation.longitude,
+                    }}
+                    title="You"
+                  />
+                )}
 
-          <TouchableOpacity style={styles.secondaryCard} onPress={onPressMyLocation}>
-            <MaterialCommunityIcons name="map-marker-radius" size={32} color="#000000" />
-            <Text style={styles.secondaryCardTitle}> My Location</Text>
+                {selectedPlaceForDirections && (
+                  <Marker
+                    coordinate={{
+                      latitude: selectedPlaceForDirections.latitude,
+                      longitude: selectedPlaceForDirections.longitude,
+                    }}
+                    title={selectedPlaceForDirections.title}
+                  />
+                )}
+              </MapView>
+            ) : (
+              <View style={styles.miniMapFallback}>
+                <MaterialCommunityIcons
+                  name="map-outline"
+                  size={34}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.miniMapFallbackTitle}>Open Map</Text>
+              </View>
+            )}
+
+            <View style={styles.miniMapNote}>
+              <MaterialCommunityIcons
+                name="map-marker-radius"
+                size={12}
+                color={theme.accent}
+              />
+              <Text style={styles.miniMapNoteText} numberOfLines={1}>
+                Near {nearLabel}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
-        {/* TODAY EVENTS */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Today's Events</Text>
           <View style={styles.livePill}>
             <Text style={styles.livePillText}>LIVE</Text>
           </View>
 
-          <TouchableOpacity style={styles.viewAllBtn} onPress={goToEvents} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.viewAllBtn}
+            onPress={goToEvents}
+            activeOpacity={0.85}
+          >
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
 
         {loadingToday ? (
           <View style={{ paddingHorizontal: 16, paddingVertical: 12, alignItems: "center" }}>
-            <ActivityIndicator />
-            <Text style={{ marginTop: 6, opacity: 0.7 }}>Loading today's events…</Text>
+            <ActivityIndicator color={theme.accent} />
+            <Text style={{ marginTop: 6, opacity: 0.7, color: theme.muted }}>
+              Loading today's events…
+            </Text>
           </View>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.eventsRow}
+          >
             {todayEvents.length === 0 ? (
-              <View style={[styles.eventCard, { justifyContent: "center", alignItems: "center" }]}>
+              <View
+                style={[
+                  styles.eventCard,
+                  { justifyContent: "center", alignItems: "center" },
+                ]}
+              >
                 <Text style={styles.eventTitle}>No events today</Text>
                 <Text style={styles.eventSubtitle}>Try View All for other days</Text>
               </View>
@@ -764,7 +809,9 @@ export function HomePage() {
                       <Text style={styles.eventIconEmoji}>{ev.icon}</Text>
                     </View>
                     <View style={[styles.badge, ev.isLive ? styles.badgeLive : styles.badgeNow]}>
-                      <Text style={styles.badgeText}>{ev.isLive ? "LIVE" : "OPEN NOW"}</Text>
+                      <Text style={styles.badgeText}>
+                        {ev.isLive ? "LIVE" : "OPEN NOW"}
+                      </Text>
                     </View>
                   </View>
 
@@ -801,7 +848,6 @@ export function HomePage() {
           </ScrollView>
         )}
 
-        {/* FAVORITE BUILDINGS (no View All) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Favorite Buildings</Text>
         </View>

@@ -1,59 +1,116 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
-//the dark mode thingy
-const LIGHT_THEME = {
-  accent: "#5F62E6",
-  bg: "#F3F5F8",
+import React, { createContext, useContext, useMemo, useState } from "react"
+import { DarkTheme, DefaultTheme } from "@react-navigation/native"
+
+export type AppTheme = {
+  background: any
+  surface: string
+  bg: string
+  card: string
+  text: string
+  muted: string
+  accent: string
+  divider: string
+  tabBar: string
+  navCard: string
+  navBorder: string
+  avatarBg: string
+  iconBoxBg: string
+  pillBg: string
+  chevBg: string
+  chevText: string
+  tileChev: string
+}
+
+type ThemeContextType = {
+  darkMode: boolean
+  setDarkMode: (value: boolean) => void
+  resetTheme: () => void
+  theme: AppTheme
+  navTheme: typeof DefaultTheme
+}
+
+const ThemeContext = createContext<ThemeContextType | null>(null)
+
+const lightTheme: AppTheme = {
+  surface: "#FFFFFF",
+  bg: "#F6F7FB",
   card: "#FFFFFF",
-  text: "#111111",
-  muted: "rgba(20,20,20,0.55)",
-  divider: "rgba(20,20,20,0.08)",
-  iconBoxBg: "rgba(95,98,230,0.12)",
-  avatarBg: "rgba(95,98,230,0.15)",
-  pillBg: "rgba(95,98,230,0.12)",
-  chevBg: "rgba(0,0,0,0.06)",
-  chevText: "rgba(20,20,20,0.45)",
-  tileChev: "rgba(20,20,20,0.35)",
-};
+  text: "#171717",
+  muted: "#7A7F8C",
+  accent: "#5F62E6",
+  divider: "#E8EAF1",
+  tabBar: "#FFFFFF",
+  navCard: "#FFFFFF",
+  navBorder: "#E8EAF1",
+  avatarBg: "#EEF0FF",
+  iconBoxBg: "#F2F4F8",
+  pillBg: "#EEF0FF",
+  chevBg: "#F2F4F8",
+  chevText: "#5F62E6",
+  tileChev: "#9AA1B2",
+  background: undefined
+}
 
-type Theme = typeof LIGHT_THEME;
-
-const DARK_THEME: Theme = {
+const darkTheme: AppTheme = {
+  surface: "#171A21",
+  bg: "#0F1115",
+  card: "#171A21",
+  text: "#F5F7FB",
+  muted: "#9AA3B2",
   accent: "#8B8DFF",
-  bg: "#0B0B0F",
-  card: "#15151C",
-  text: "#F4F4F7",
-  muted: "rgba(244,244,247,0.60)",
-  divider: "rgba(244,244,247,0.10)",
-  iconBoxBg: "rgba(139,141,255,0.18)",
-  avatarBg: "rgba(139,141,255,0.22)",
-  pillBg: "rgba(139,141,255,0.18)",
-  chevBg: "rgba(255,255,255,0.10)",
-  chevText: "rgba(244,244,247,0.55)",
-  tileChev: "rgba(244,244,247,0.35)",
-};
-
-type ThemeContextValue = {
-  darkMode: boolean;
-  setDarkMode: (v: boolean) => void;
-  theme: Theme;
-};
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+  divider: "#242A35",
+  tabBar: "#171A21",
+  navCard: "#171A21",
+  navBorder: "#242A35",
+  avatarBg: "#232847",
+  iconBoxBg: "#1D2230",
+  pillBg: "#232847",
+  chevBg: "#222839",
+  chevText: "#C9CBFF",
+  tileChev: "#A8B0C2",
+  background: undefined
+}
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(false)
 
-  const theme = useMemo<Theme>(() => (darkMode ? DARK_THEME : LIGHT_THEME), [darkMode]);
+  const resetTheme = () => {
+    setDarkMode(false)
+  }
+
+  const theme = useMemo(() => {
+    return darkMode ? darkTheme : lightTheme
+  }, [darkMode])
+
+  const navTheme = useMemo(() => {
+    const baseTheme = darkMode ? DarkTheme : DefaultTheme
+
+    return {
+      ...baseTheme,
+      colors: {
+        ...baseTheme.colors,
+        background: theme.bg,
+        card: theme.navCard,
+        text: theme.text,
+        border: theme.navBorder,
+        primary: theme.accent,
+      },
+    }
+  }, [darkMode, theme])
 
   return (
-    <ThemeContext.Provider value={{ darkMode, setDarkMode, theme }}>
+    <ThemeContext.Provider
+      value={{ darkMode, setDarkMode, resetTheme, theme, navTheme }}
+    >
       {children}
     </ThemeContext.Provider>
-  );
+  )
 }
+
 export function useTheme() {
-    const ctx = useContext(ThemeContext);
-    if (!ctx) throw new Error("useTheme must be used inside ThemeProvider");
-    return ctx;
+  const ctx = useContext(ThemeContext)
+  if (!ctx) {
+    throw new Error("useTheme must be used inside ThemeProvider")
   }
-  
+  return ctx
+}

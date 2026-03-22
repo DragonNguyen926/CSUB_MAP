@@ -8,14 +8,16 @@ import {
   Alert,
 } from "react-native"
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
-import { styles } from "./EventPage.styles"
+import { createStyles } from "./EventPage.styles"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { EventsStackParamList } from "../NAV/EventsStack"
+import { useTheme } from "../NAV/ThemeProvider"
+import { useAuth } from "../SETTINGPAGE/AUTH/AuthContext"
 
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-const API_BASE = "http://localhost:3001" // TODO: đổi sang LAN IP nếu chạy trên phone thật
+const API_BASE = "https://ezequiel-unfractious-serafina.ngrok-free.dev"
 
 type DbEvent = {
   id: string
@@ -49,7 +51,7 @@ function toYYYYMMDD(d: Date) {
 }
 
 function getMonday(d: Date) {
-  const day = d.getDay() // Sun=0
+  const day = d.getDay()
   const diff = (day === 0 ? -6 : 1) - day
   const monday = new Date(d)
   monday.setDate(d.getDate() + diff)
@@ -81,8 +83,8 @@ function formatTimeLabel(startIso: string, endIso: string) {
 
 function dayIndexMon0(dateIso: string) {
   const d = new Date(dateIso)
-  const js = d.getDay() // 0..6
-  return js === 0 ? 6 : js - 1 // Mon=0 ... Sun=6
+  const js = d.getDay()
+  return js === 0 ? 6 : js - 1
 }
 
 function weekLabel(weekStart: Date) {
@@ -96,18 +98,20 @@ export function EventPage() {
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<EventsStackParamList, "EventHome">>()
+  const { theme } = useTheme()
+  const styles = createStyles(theme)
 
-  // ✅ "today week" anchor
+  const { user } = useAuth()
+  const canAddEvent = user?.role === "admin"
+
   const currentWeekStart = useMemo(() => getMonday(new Date()), [])
   const [weekStart, setWeekStart] = useState(() => currentWeekStart)
 
-  // active day
   const [activeDay, setActiveDay] = useState(() => dayIndexMon0(new Date().toISOString()))
 
   const [loading, setLoading] = useState(false)
   const [events, setEvents] = useState<EventCard[]>([])
 
-  // ✅ clamp: never allow weekStart earlier than current week
   useEffect(() => {
     if (weekStart.getTime() < currentWeekStart.getTime()) {
       setWeekStart(currentWeekStart)
@@ -184,9 +188,6 @@ export function EventPage() {
     }, [loadEvents])
   )
 
-  // =========================
-  // ✅ Navigate chắc chắn
-  // =========================
   const navigateToMap = useCallback(
     (place: NavPlace) => {
       const intent = { type: "route_to", place }
@@ -234,7 +235,6 @@ export function EventPage() {
       const top = chain[chain.length - 1]
       const state = top?.getState?.()
       Alert.alert("Navigate failed", "Không tìm thấy route Map trong navigator.")
-      // eslint-disable-next-line no-console
       console.log("ROOT NAV STATE:", JSON.stringify(state, null, 2))
     },
     [navigation]
@@ -242,7 +242,6 @@ export function EventPage() {
 
   const dayEvents = events.filter((e) => e.dayIndex === activeDay)
 
-  // ✅ rule: cannot go before current week
   const canGoPrev = weekStart.getTime() > currentWeekStart.getTime()
 
   const onPrevWeek = useCallback(() => {
@@ -260,15 +259,14 @@ export function EventPage() {
   }, [currentWeekStart])
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <ScrollView
-  showsVerticalScrollIndicator={false}
-  contentContainerStyle={styles.scrollContent}
-  contentInsetAdjustmentBehavior="never"
-  scrollIndicatorInsets={{ bottom: 0 }}
-  style={{ marginBottom: -insets.bottom }} // ✅ kéo content xuống, ăn luôn safe-area
->
-        {/* ===== Week Picker Header ===== */}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="never"
+        scrollIndicatorInsets={{ bottom: 0 }}
+        style={{ marginBottom: -insets.bottom }}
+      >
         <View
           style={{
             flexDirection: "row",
@@ -277,7 +275,6 @@ export function EventPage() {
             marginBottom: 10,
           }}
         >
-          {/* ✅ Prev (disabled if current week) */}
           <TouchableOpacity
             onPress={onPrevWeek}
             disabled={!canGoPrev}
@@ -288,30 +285,28 @@ export function EventPage() {
               opacity: canGoPrev ? 1 : 0.35,
             }}
           >
-            <Text style={{ fontWeight: "700" }}>‹</Text>
+            <Text style={{ fontWeight: "700", color: theme.text }}>‹</Text>
           </TouchableOpacity>
 
           <View style={{ alignItems: "center" }}>
-            <Text style={{ fontSize: 16, fontWeight: "800", color: "#0F172A" }}>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: theme.text }}>
               {weekLabel(weekStart)}
             </Text>
 
             <TouchableOpacity onPress={onThisWeek} activeOpacity={0.85} style={{ marginTop: 6 }}>
-              <Text style={{ color: "#2563EB", fontWeight: "700" }}>This week</Text>
+              <Text style={{ color: theme.accent, fontWeight: "700" }}>This week</Text>
             </TouchableOpacity>
           </View>
 
-          {/* ✅ Next always allowed (future) */}
           <TouchableOpacity
             onPress={onNextWeek}
             activeOpacity={0.85}
             style={{ paddingVertical: 8, paddingHorizontal: 10 }}
           >
-            <Text style={{ fontWeight: "700" }}>›</Text>
+            <Text style={{ fontWeight: "700", color: theme.text }}>›</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ===== Day Tabs (Mon–Sun) ===== */}
         <View style={styles.tabsRow}>
           {dayDateLabels.map(({ d, dateStr }, index) => {
             const isActive = activeDay === index
@@ -328,7 +323,6 @@ export function EventPage() {
           })}
         </View>
 
-        {/* ===== Section Header ===== */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             {days[activeDay]} • {dayDateLabels[activeDay]?.dateStr}
@@ -340,7 +334,7 @@ export function EventPage() {
 
         {loading && (
           <View style={{ paddingVertical: 14, alignItems: "center" }}>
-            <ActivityIndicator />
+            <ActivityIndicator color={theme.accent} />
             <Text style={styles.emptySub}>Loading events…</Text>
           </View>
         )}
@@ -397,16 +391,19 @@ export function EventPage() {
             </View>
           ))}
 
-        {/* ===== Add Event ===== */}
-        <View style={styles.createBtnWrap}>
-          <TouchableOpacity
-            style={styles.createButton}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate("CreateEvent", { weekStartISO: weekStart.toISOString() })}
-          >
-            <Text style={styles.createButtonText}>Add Event</Text>
-          </TouchableOpacity>
-        </View>
+        {canAddEvent && (
+          <View style={styles.createBtnWrap}>
+            <TouchableOpacity
+              style={styles.createButton}
+              activeOpacity={0.85}
+              onPress={() =>
+                navigation.navigate("CreateEvent", { weekStartISO: weekStart.toISOString() })
+              }
+            >
+              <Text style={styles.createButtonText}>Add Event</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={{ height: 24 }} />
       </ScrollView>
